@@ -1,6 +1,6 @@
 # Bestandsplan-Editor (Server-Variante mit Live-Karte)
 
-Editor für Bestandspläne von Straßenabschnitten. Luftbild und Karte kommen direkt aus den amtlichen Diensten, die Lage ist in ETRS89 / UTM 32N, das PDF ist maßstäblich.
+Editor für Bestandspläne von Straßenabschnitten als Grundlage für Verkehrszeichenpläne. „Grundlage erzeugen" übernimmt für einen Ausschnitt das Kataster (Flurstücke, Gebäude, Verkehrsflächen) als Strichzeichnung und schlägt die Straßen mit Fahrstreifen und Markierung vor. Luftbild und Karten sind als Hintergrund zuschaltbar. Lage in ETRS89 / UTM 32N, PDF maßstäblich.
 
 ## Inhalt
 
@@ -30,6 +30,10 @@ Diese Konfiguration wurde ohne Zugriff auf die echten Dienste erstellt. Bitte ei
 - Karten-Kachel:
   `/wms/basemap?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS=de_basemapde_web_raster_farbe&STYLES=&CRS=EPSG:25832&BBOX=513000,5403000,513512,5403512&WIDTH=512&HEIGHT=512&FORMAT=image/png`
 - Ortssuche: `/geocode?format=jsonv2&limit=3&countrycodes=de&q=Rosensteinstraße Stuttgart`
+- Kataster (muss JSON mit einem Gebäude liefern):
+  `/wfs/alkis?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=nora:v_al_gebaeude&COUNT=1&SRSNAME=EPSG:25832&BBOX=513000,5403000,513200,5403200,EPSG:25832&OUTPUTFORMAT=application/json`
+- Straßen aus OpenStreetMap (muss JSON mit `elements` liefern):
+  `/overpass?data=[out:json];way[highway=motorway](48.78,9.17,48.79,9.19);out body geom 1;`
 
 Fehler zeigt `docker logs bestandsplan`.
 
@@ -43,6 +47,8 @@ Die Seite hat keine Anmeldung. Der Proxy spricht zwar nur drei feste Dienste an,
 |---|---|---|---|
 | Luftbild DOP20 | LGL Baden-Württemberg, WMS `WMS_LGL-BW_ATKIS_DOP_20_C` | Datenlizenz Deutschland - Namensnennung - Version 2.0 | `LGL-BW (Jahr) Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de` |
 | Karte | BKG, basemap.de Web Raster, WMS `wms_basemapde` | CC BY 4.0 | `© GeoBasis-DE / BKG (Jahr) CC BY 4.0` |
+| Kataster (Vektor und Bild) | LGL Baden-Württemberg, WFS `WFS_LGL-BW_ALKIS`, WMS `WMS_LGL-BW_ALKIS_Basis_transparent` | Datenlizenz Deutschland - Namensnennung - Version 2.0 | wie Luftbild |
+| Straßenachsen | OpenStreetMap über die Overpass API | ODbL | `© OpenStreetMap-Mitwirkende` |
 | Ortssuche | Nominatim, OpenStreetMap | ODbL | `© OpenStreetMap-Mitwirkende` |
 
 Der Editor zeigt den Quellenvermerk am Bildschirm und druckt ihn ins PDF.
@@ -60,6 +66,20 @@ Die Suche nutzt den öffentlichen Nominatim-Server der OpenStreetMap Foundation.
 
 Für einzelne Suchen im Büroalltag passt das. Wenn du das nicht willst, die `location = /geocode` in `nginx.conf` löschen; der Editor funktioniert dann ohne Suche weiter.
 
+### Nutzungsregeln der Overpass API
+
+Die Straßenachsen kommen vom öffentlichen Server overpass-api.de: https://wiki.openstreetmap.org/wiki/Overpass_API
+
+- Für regelmäßig genutzte Anwendungen gilt als Richtwert: unter 100 Abfragen und unter 10 MB pro Tag.
+- Der Editor stellt eine Abfrage pro „Grundlage erzeugen", der Server puffert sie 7 Tage.
+- Server-Adressen können bei Überlast gesperrt werden. Dann liefert „Grundlage erzeugen" nur das Kataster, und die Straßen zeichnest du von Hand.
+
+### Was die automatische Grundlage kann und was nicht
+
+- Das Kataster ist amtlich und lagegenau, zeigt aber Grundstücke und Gebäude, keine Fahrbahnränder.
+- Die Straßen sind ein Vorschlag: Achse und Fahrstreifenzahl aus OpenStreetMap, Breiten nach Regelwerten. Vor der Verwendung gegen das Luftbild prüfen und anpassen.
+- Exakte Fahrbahnränder und Markierungen gibt es nur aus einer Bestandsvermessung.
+
 ## Speicherung
 
 Der Plan liegt im Browser (localStorage) und wird beim Neuladen wiederhergestellt. Verlässlich und geräteübergreifend ist nur „Projekt speichern" (JSON-Datei).
@@ -68,4 +88,10 @@ Kartenkacheln puffert der Server bis zu 90 Tage in einem Docker-Volume (höchste
 
 ## Aktualisieren
 
-Neue `index.html` in `html/` legen, fertig. Ein Neustart ist nur nach Änderungen an `nginx.conf` nötig: `docker compose restart`.
+Geänderte Dateien ins GitHub-Repo hochladen, dann auf dem Server:
+
+```bash
+cd /opt/bestandsplan && git pull && docker compose restart
+```
+
+Im Browser danach einmal mit Strg+F5 neu laden.

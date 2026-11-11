@@ -45,6 +45,7 @@ button{cursor:pointer}
 .btn.warn:hover{border-color:var(--danger);color:var(--danger)}
 .btn.sm{padding:2px 7px;font-size:13px}
 .spacer{flex:1}
+#mapSel{background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:5px 6px;max-width:190px}
 #q{width:230px;max-width:60vw;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:5px 9px}
 .attr{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:#ffffffd9;color:#18212e;border-radius:4px;padding:3px 9px;font-size:11px;max-width:46%;text-align:center}
 .attr a{color:inherit}
@@ -124,6 +125,10 @@ th{font:600 12px var(--display);letter-spacing:.08em;text-transform:uppercase;co
     <button class="btn" type="submit">Suchen</button>
   </form>
   <div class="grp">
+    <select id="mapSel" aria-label="Hintergrundkarte" title="Hintergrundkarte am Bildschirm"></select>
+    <button class="btn pri" id="bBase" title="Kataster und Straßen für einen Ausschnitt automatisch übernehmen">Grundlage erzeugen</button>
+  </div>
+  <div class="grp">
     <button class="btn warn" id="bNew" title="Leeren Plan beginnen">Neu</button>
     <button class="btn" id="bOpen" title="Gespeicherte Projektdatei laden">Projekt öffnen</button>
     <button class="btn" id="bSave" title="Projektdatei mit Luftbild speichern">Projekt speichern</button>
@@ -176,6 +181,8 @@ const MAPS={
     html:'Luftbild: LGL-BW ('+YR+') <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">Datenlizenz Deutschland - Namensnennung - Version 2.0</a>, <a href="https://www.lgl-bw.de" target="_blank" rel="noopener">www.lgl-bw.de</a>'},
   farbe:{n:'Karte farbig (basemap.de)',ep:'/wms/basemap',layers:'de_basemapde_web_raster_farbe',fmt:'image/png',att:'(c) GeoBasis-DE / BKG ('+YR+') CC BY 4.0',
     html:'Karte: © GeoBasis-DE / <a href="https://www.bkg.bund.de" target="_blank" rel="noopener">BKG</a> ('+YR+') <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>'},
+  alkis:{n:'Liegenschaftskarte (ALKIS)',ep:'/wms/alkis',layers:'nora:ALKIS_Basis_transparent',fmt:'image/png',extra:'&TRANSPARENT=TRUE',maxRes:10,att:'LGL-BW ('+YR+') Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de',
+    html:'Liegenschaftskarte: LGL-BW ('+YR+') <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">Datenlizenz Deutschland - Namensnennung - Version 2.0</a>, <a href="https://www.lgl-bw.de" target="_blank" rel="noopener">www.lgl-bw.de</a>'},
   grau:{n:'Karte grau (basemap.de)',ep:'/wms/basemap',layers:'de_basemapde_web_raster_grau',fmt:'image/png',att:'(c) GeoBasis-DE / BKG ('+YR+') CC BY 4.0',
     html:'Karte: © GeoBasis-DE / <a href="https://www.bkg.bund.de" target="_blank" rel="noopener">BKG</a> ('+YR+') <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>'}
 };
@@ -187,15 +194,16 @@ function utm32(lat,lon){ // WGS84/ETRS89 -> UTM Zone 32N (GRS80)
   return[500000+k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep)*A**5/120),k0*(M+N*tn*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep)*A**6/720))];
 }
 const KL={bab:{n:'Autobahn',s:.15,b:.30,d:[6,12]},land:{n:'Außerorts',s:.12,b:.25,d:[4,8]},stadt:{n:'Innerorts',s:.12,b:.25,d:[3,6]}};
-const STRIP={fs:['Fahrstreifen','#8b9199','#ffffff'],seit:['Seitenstreifen','#99a0a8','#ffffff'],rand:['Randstreifen','#8b9199','#ffffff'],
-  bus:['Busfahrstreifen','#8b9199','#ffffff'],park:['Parkstreifen','#a8aeb6','#f3f4f5'],rad:['Radweg / Radfahrstreifen','#c98d80','#f6e5e1'],
-  geh:['Gehweg','#d3d1cb','#efeeeb'],mittel:['Mittelstreifen','#b7cea3','#e7f0df'],gruen:['Grünstreifen','#b7cea3','#e7f0df'],bank:['Bankett','#d9cfb8','#f3eee2']};
+const STRIP={fs:['Fahrstreifen','#8b9199','#ffffff','#dcdcdc'],seit:['Seitenstreifen','#99a0a8','#ffffff','#dcdcdc'],rand:['Randstreifen','#8b9199','#ffffff','#dcdcdc'],
+  bus:['Busfahrstreifen','#8b9199','#ffffff','#dcdcdc'],park:['Parkstreifen','#a8aeb6','#f3f4f5','#e6e6e6'],rad:['Radweg / Radfahrstreifen','#c98d80','#f6e5e1','#f0d9d2'],
+  geh:['Gehweg','#d3d1cb','#efeeeb','#efefef'],mittel:['Mittelstreifen','#b7cea3','#e7f0df','#b7dc86'],gruen:['Grünstreifen','#b7cea3','#e7f0df','#cfe8b0'],bank:['Bankett','#d9cfb8','#f3eee2','#f1ede2']};
 const LINE={none:'keine Linie',leit:'Leitlinie (unterbrochen)',fsb:'Fahrstreifenbegrenzung (durchgehend)',rand:'Fahrbahnbegrenzung',
   breit:'Breitstrich durchgehend',block:'Breitstrich unterbrochen',doppel:'Doppellinie',halt:'Haltlinie',warte:'Wartelinie',furt:'Furtmarkierung',
   bord:'Bordstein',kante:'Fahrbahnrand unmarkiert'};
 const ROADLINES=['none','leit','fsb','rand','breit','block','doppel','bord','kante'];
-const AREA={asphalt:['Fahrbahnfläche','#8b9199','#ffffff'],sperr:['Sperrfläche','#8b9199','#ffffff'],insel:['Verkehrsinsel','#d3d1cb','#efeeeb'],
-  gruen:['Grünfläche','#b7cea3','#e7f0df'],geh:['Gehwegfläche','#d3d1cb','#efeeeb'],rad:['Radverkehrsfläche','#c98d80','#f6e5e1'],bau:['Gebäude / Bauwerk','#b3aa9d','#e3ded6']};
+const AREA={asphalt:['Fahrbahnfläche','#8b9199','#ffffff','#dcdcdc'],baub:['Baubereich','#e2575f','#f3b6ba','#e2575f'],sperr:['Sperrfläche','#8b9199','#ffffff','#dcdcdc'],insel:['Verkehrsinsel','#d3d1cb','#efeeeb','#efefef'],
+  gruen:['Grünfläche','#b7cea3','#e7f0df','#cfe8b0'],geh:['Gehwegfläche','#d3d1cb','#efeeeb','#efefef'],rad:['Radverkehrsfläche','#c98d80','#f6e5e1','#f0d9d2'],bau:['Gebäude / Bauwerk','#b3aa9d','#e3ded6','#e9e9e9']};
+const CI=()=>({farbe:1,linie:2,plan:3}[S.style]||1),DK=()=>S.style!=='farbe';
 const GUARD={sp:'Schutzplanke einseitig',dsp:'Schutzplanke doppelseitig',bsw:'Betonschutzwand',lsw:'Lärmschutzwand',zaun:'Zaun',leitpf:'Leitpfosten'};
 const SYM={pf_g:'Pfeil geradeaus',pf_l:'Pfeil links',pf_r:'Pfeil rechts',pf_gl:'Pfeil geradeaus/links',pf_gr:'Pfeil geradeaus/rechts',
   lsa:'Signalgeber (LSA)',mast:'Mast / Leuchte',schacht:'Schacht',baum:'Baum',adp:'Anpralldämpfer'};
@@ -223,25 +231,27 @@ const PRESET={
 };
 const TOOLS=[['sel','Auswählen','V'],['road','Straße','S'],['line','Markierung','M'],['area','Fläche','F'],['guard','Schutzeinrichtung','G'],
   ['sign','Verkehrszeichen','Z'],['sym','Symbol','Y'],['text','Text','T'],['dim','Maß','B'],['sheet','Blatt','P']];
-const LAYERS=[['bg','Karte / Luftbild'],['road','Straßen'],['area','Flächen'],['line','Markierung'],['guard','Schutzeinrichtungen'],['sign','Verkehrszeichen'],
+const LAYERS=[['bg','Karte / Luftbild'],['base','Kataster'],['road','Straßen'],['area','Flächen'],['line','Markierung'],['guard','Schutzeinrichtungen'],['sign','Verkehrszeichen'],
   ['sym','Symbole'],['stat','Stationierung'],['dim','Maße'],['text','Texte'],['sheet','Blattrahmen']];
 const POLY={road:2,line:2,area:3,guard:2,dim:2,calib:2};
 const TNAME={road:'Straße',line:'Markierung',area:'Fläche',guard:'Schutzeinrichtung',sign:'Verkehrszeichen',sym:'Symbol',text:'Text',dim:'Maß',sheet:'Blatt'};
 
 /* ---------- Zustand ---------- */
+let BASE=[];
 let S, BGDATA=null, BGIMG=null, sel=null, selV=-1, tool='sel', draft=null, cur=[0,0], snapPt=null;
 let hist=[], hi=-1, nextId=1;
 const LAST={road:'land2',line:'fsb',area:'asphalt',guard:'sp',sign:'274-60',sym:'pf_g'};
 const V={z:1,x:0,y:0};
 function blank(){
   return {v:1,meta:{projekt:'',inhalt:'Bestandsplan',ag:'',verfasser:'HX mobility GmbH',bearb:'',plannr:'',datum:new Date().toLocaleDateString('de-DE')},
-    sheet:{paper:'A3',orient:'quer',scale:500,north:0,legend:true,bgPrint:true},style:'farbe',surfAlpha:1,bg:null,origin:{e:HOME.e,n:HOME.n},map:{k:'dop',alpha:1},objs:[],
+    sheet:{paper:'A3',orient:'quer',scale:500,north:0,legend:true,bgPrint:false},style:'plan',surfAlpha:1,bg:null,origin:{e:HOME.e,n:HOME.n},map:{k:'grau',alpha:1},objs:[],
     layers:Object.fromEntries(LAYERS.map(l=>[l[0],true]))};
 }
 const uid=()=>nextId++;
 const selObj=()=>S.objs.find(o=>o.id===sel);
 function commit(){hist=hist.slice(0,hi+1);hist.push(JSON.stringify(S));if(hist.length>80)hist.shift();hi=hist.length-1;persist()}
 function persist(){try{localStorage.setItem('bps.state',JSON.stringify(S))}catch(e){}}
+function persistBase(){try{BASE.length?localStorage.setItem('bps.base',JSON.stringify(BASE)):localStorage.removeItem('bps.base')}catch(e){try{localStorage.removeItem('bps.base')}catch(_){}toast('Das Kataster ist zu groß für den Zwischenspeicher im Browser. Sichere den Plan über „Projekt speichern".')}}
 function persistBg(){try{BGDATA?localStorage.setItem('bps.bg',BGDATA):localStorage.removeItem('bps.bg')}catch(e){try{localStorage.removeItem('bps.bg')}catch(_){}}}
 function undo(d){const n=hi+d;if(n<0||n>=hist.length)return;hi=n;S=JSON.parse(hist[hi]);if(!selObj()){sel=null;selV=-1}persist();renderProps();draw()}
 function loadState(o){S=Object.assign(blank(),o);if(!o.origin){S.origin={e:HOME.e,n:HOME.n};S.map={k:'none',alpha:1}}if(!S.map||(S.map.k!=='none'&&!MAPS[S.map.k]))S.map={k:'none',alpha:1};S.layers=Object.assign(blank().layers,o.layers||{});nextId=1+Math.max(0,...S.objs.map(x=>x.id||0));sel=null;selV=-1}
@@ -279,7 +289,7 @@ function proj(D,p){ // nächster Punkt auf Linienzug: Abstand, Station, Seite (+
   return best;
 }
 function rg(r){const D=dense(r),b=[0];r.strips.forEach(s=>b.push(b[b.length-1]+(+s.w||0)));const W=b[b.length-1];
-  const ax=(r.axis==null||r.axis==='m')?W/2:b[Math.min(r.axis,b.length-1)];const c=cum(D);return{D,c,len:c[c.length-1],off:b.map(v=>v-ax),W}}
+  let ax;if(r.axis==='f'){const ix=r.strips.map((s,i)=>s.k==='fs'||s.k==='bus'?i:-1).filter(i=>i>=0);ax=ix.length?(b[ix[0]]+b[ix[ix.length-1]+1])/2:W/2}else ax=(r.axis==null||r.axis==='m')?W/2:b[Math.min(r.axis,b.length-1)];const c=cum(D);return{D,c,len:c[c.length-1],off:b.map(v=>v-ax),W}}
 function along(D,step,start){const c=cum(D),L=c[c.length-1],out=[];if(step<=0)return out;for(let s=start??step/2;s<=L+1e-6;s+=step){const q=at(D,c,s);q.s=s;out.push(q)}return out}
 function inPoly(p,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
 function hatch(P,sp,ang){const c=Math.cos(ang),s=Math.sin(ang),R=P.map(p=>[p[0]*c+p[1]*s,-p[0]*s+p[1]*c]);
@@ -295,6 +305,7 @@ function sheetCorners(sh){const f=frame(),k=S.sheet.scale/1000,hw=f.aw*k/2,hh=f.
   return[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([u,v])=>[sh.p[0]+u*c-v*s,sh.p[1]+u*s+v*c])}
 function bbox(){let b=[1e18,1e18,-1e18,-1e18];const add=p=>{b[0]=Math.min(b[0],p[0]);b[1]=Math.min(b[1],p[1]);b[2]=Math.max(b[2],p[0]);b[3]=Math.max(b[3],p[1])};
   S.objs.forEach(o=>{if(o.t==='sheet')sheetCorners(o).forEach(add);else if(o.pts)o.pts.forEach(add);else if(o.p)add(o.p)});
+  BASE.forEach(it=>{add([it.b[0],it.b[1]]);add([it.b[2],it.b[3]])});
   if(S.bg){add([S.bg.x,S.bg.y]);add([S.bg.x+S.bg.w*S.bg.mpp,S.bg.y+S.bg.h*S.bg.mpp])}
   return b[0]>b[2]?null:b}
 
@@ -307,7 +318,7 @@ function gtext(G,str,x,y,o){
   G.txt(str,x,y,size,a,o.color||INK,o.bold);
 }
 function drawMark(G,pts,code,kl){
-  const K=KL[kl]||KL.land,c=S.style==='linie'?'#111111':'#ffffff',st=(w,dash)=>({stroke:c,w:Math.max(w,G.mm(.18)),dash});
+  const K=KL[kl]||KL.land,c=DK()?'#111111':'#ffffff',st=(w,dash)=>({stroke:c,w:Math.max(w,G.mm(.18)),dash});
   switch(code){
     case'leit':G.path(pts,0,st(K.s,K.d));break;
     case'fsb':G.path(pts,0,st(K.s));break;
@@ -367,12 +378,12 @@ function drawSign(G,o){
   const d=s*1.35+G.mm(2.1);gtext(G,'Z '+o.vz+(o.txt?' · '+o.txt:''),x-Math.sin(G.rot)*d,y+Math.cos(G.rot)*d,{size:G.mm(2.1),box:1});
 }
 function drawSym(G,o){
-  const[x,y]=o.p,r=(o.rot||0)*Math.PI/180,c=Math.cos(r),sn=Math.sin(r),k=o.k,mc=S.style==='linie'?'#111111':'#ffffff';
+  const[x,y]=o.p,r=(o.rot||0)*Math.PI/180,c=Math.cos(r),sn=Math.sin(r),k=o.k,mc=DK()?'#111111':'#ffffff';
   if(k.startsWith('pf_')){const L=o.len||5,P=a=>a.map(([u,v])=>[x+(u*c-v*sn)*L,y+(u*sn+v*c)*L]);
     const str=[[-.03,.5],[-.03,-.15],[-.13,-.15],[0,-.5],[.13,-.15],[.03,-.15],[.03,.5]],sh=[[-.03,.5],[-.03,-.12],[.03,-.12],[.03,.5]],
       hl=[[-.03,-.3],[-.36,-.1],[-.03,.1]],mir=a=>a.map(([u,v])=>[-u,v]);
     const parts={pf_g:[str],pf_l:[sh,hl],pf_r:[sh,mir(hl)],pf_gl:[str,hl],pf_gr:[str,mir(hl)]}[k]||[str];
-    parts.forEach(q=>G.path(P(q),1,{fill:mc,stroke:S.style==='linie'?null:'#ffffff',w:G.mm(.05)}));return}
+    parts.forEach(q=>G.path(P(q),1,{fill:mc,stroke:DK()?null:'#ffffff',w:G.mm(.05)}));return}
   const s=G.mm(2.2),P=a=>a.map(([u,v])=>[x+(u*c-v*sn)*s,y+(u*sn+v*c)*s]),st={fill:'#ffffff',stroke:INK,w:G.mm(.25)};
   if(k==='lsa'){G.path(P([[-.55,-1.4],[.55,-1.4],[.55,1.4],[-.55,1.4]]),1,{fill:INK});[['#e53935',-.85],['#f2b400',0],['#43a047',.85]].forEach(([col,v])=>{const q=P([[0,v]])[0];G.circle(q[0],q[1],s*.3,{fill:col})})}
   else if(k==='mast'){G.circle(x,y,s*.8,st);G.path(P([[-.8,0],[.8,0]]),0,st);G.path(P([[0,-.8],[0,.8]]),0,st)}
@@ -380,14 +391,24 @@ function drawSym(G,o){
   else if(k==='baum'){G.circle(x,y,Math.max(s,o.len||2.5),{fill:'#8fb873',stroke:'#4f7a36',w:G.mm(.25),alpha:.85});G.circle(x,y,G.mm(.4),{fill:'#4f7a36'})}
   else if(k==='adp'){G.path(P([[0,-1.8],[.8,1.2],[-.8,1.2]]),1,{fill:YEL,stroke:INK,w:G.mm(.25)})}
 }
+function drawBase(G){
+  if(!BASE.length||!S.layers.base)return;const vb=G.vb,on=it=>!vb||!(it.b[2]<vb[0]||it.b[0]>vb[2]||it.b[3]<vb[1]||it.b[1]>vb[3]),by=k=>BASE.filter(it=>it.k===k&&on(it));
+  by('verk').forEach(it=>it.r.forEach(r=>G.path(r,1,{fill:'#f2f2f2'})));
+  by('wasser').forEach(it=>it.r.forEach(r=>G.path(r,1,{fill:'#d9e9f6'})));
+  const fl=by('flst');fl.forEach(it=>it.r.forEach(r=>G.path(r,1,{stroke:'#9c9c9c',w:G.mm(.13)})));
+  by('geb').forEach(it=>it.r.forEach(r=>G.path(r,1,{fill:'#e8e8e8',stroke:'#6e6e6e',w:G.mm(.18)})));
+  fl.forEach(it=>{if(it.t&&it.b[2]-it.b[0]>G.mm(14)&&it.b[3]-it.b[1]>G.mm(7))gtext(G,it.t,(it.b[0]+it.b[2])/2,(it.b[1]+it.b[3])/2,{size:G.mm(1.8),color:'#9c9c9c'})});
+}
 function scene(G){
-  const L=S.layers,ci=S.style==='linie'?2:1,by=t=>S.objs.filter(o=>o.t===t),roads=by('road'),geo=new Map(roads.map(r=>[r.id,rg(r)]));
-  if(L.road){
-    roads.forEach(r=>{const g=geo.get(r.id);r.strips.forEach((s,i)=>{const col=(STRIP[s.k]||STRIP.fs)[ci];
-      G.path(offs(g.D,g.off[i]).concat(offs(g.D,g.off[i+1]).reverse()),1,{fill:col,stroke:S.surfAlpha>=1?col:null,w:G.mm(.06),alpha:S.surfAlpha})})});
-    roads.forEach(r=>{const g=geo.get(r.id);r.lines.forEach((c,i)=>{if(c&&c!=='none')drawMark(G,offs(g.D,g.off[i]),c,r.kl)})});
+  const L=S.layers,ci=CI(),by=t=>S.objs.filter(o=>o.t===t),roads=by('road'),geo=new Map(roads.map(r=>[r.id,rg(r)]));
+  drawBase(G);
+  if(L.road){ // untergeordnete Straßen zuerst, damit die übergeordnete im Knoten oben liegt
+    roads.map((r,i)=>[r.rank??9,i,r]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).forEach(([,,r])=>{const g=geo.get(r.id);if(g.D.length<2)return;
+      r.strips.forEach((s,i)=>{const col=(STRIP[s.k]||STRIP.fs)[ci];
+        G.path(offs(g.D,g.off[i]).concat(offs(g.D,g.off[i+1]).reverse()),1,{fill:col,stroke:S.surfAlpha>=1?col:null,w:G.mm(.06),alpha:S.surfAlpha})});
+      r.lines.forEach((c,i)=>{if(c&&c!=='none')drawMark(G,offs(g.D,g.off[i]),c,r.kl)})});
   }
-  if(L.area)by('area').forEach(o=>{if(o.pts.length<3)return;const A=AREA[o.k]||AREA.asphalt,mc=S.style==='linie'?'#111111':'#ffffff';
+  if(L.area)by('area').forEach(o=>{if(o.pts.length<3)return;const A=AREA[o.k]||AREA.asphalt,mc=DK()?'#111111':'#ffffff';
     G.path(o.pts,1,{fill:A[ci],alpha:S.surfAlpha});
     if(o.k==='sperr'){hatch(o.pts,Math.max(1.5,G.mm(1.2)),Math.PI/4).forEach(sg=>G.path(sg,0,{stroke:mc,w:Math.max(.25,G.mm(.2))}));G.path(o.pts,1,{stroke:mc,w:Math.max(.12,G.mm(.2))})}
     else if(o.k==='insel')G.path(o.pts,1,{stroke:'#3d4249',w:Math.max(.15,G.mm(.3))});
@@ -399,7 +420,7 @@ function scene(G){
       for(let s=s0;s<=g.len+1e-6;s+=int){const q=at(g.D,g.c,s),nx=-Math.sin(q.a),ny=Math.cos(q.a),[x,y]=q.p,a=[x+nx*(g.off[0]-G.mm(1.5)),y+ny*(g.off[0]-G.mm(1.5))];
         G.path([a,[x+nx*g.off[last],y+ny*g.off[last]]],0,{stroke:'#b0155a',w:G.mm(.2)});
         gtext(G,fmtSt(st0+dir*s,r.stFmt),a[0]-nx*G.mm(2.2),a[1]-ny*G.mm(2.2),{size:G.mm(2.2),angle:upright(G,q.a),color:'#b0155a',box:1})}}
-    if(r.name){const q=at(g.D,g.c,Math.min(g.len/2,Math.max(G.mm(30),g.len*.12))),nx=-Math.sin(q.a),ny=Math.cos(q.a),d=g.off[last]+G.mm(3.5);
+    if(r.name&&g.len>G.mm(45)){const q=at(g.D,g.c,Math.min(g.len/2,Math.max(G.mm(30),g.len*.12))),nx=-Math.sin(q.a),ny=Math.cos(q.a),d=g.off[last]+G.mm(3.5);
       gtext(G,r.name,q.p[0]+nx*d,q.p[1]+ny*d,{size:G.mm(3.2),angle:upright(G,q.a),bold:1,box:1})}});
   if(L.sym)by('sym').forEach(o=>drawSym(G,o));
   if(L.sign)by('sign').forEach(o=>drawSign(G,o));
@@ -417,7 +438,7 @@ function getTile(k,r,ix,iy,want){
   if(!t&&want){const sp=TS*r,x0=ix*sp,y0=iy*sp;t={img:new Image(),ok:false,bad:false};
     t.p=new Promise(res=>{t.img.onload=()=>{t.ok=true;mapErr=0;draw();res(t)};
       t.img.onerror=()=>{t.bad=true;if(++mapErr===6)toast('Der Kartendienst antwortet nicht. Prüfe, ob der Server die Dienste erreicht.');res(t)}});
-    t.img.src=m.ep+'?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS='+m.layers+'&STYLES=&CRS=EPSG:25832&BBOX='+[x0,y0,x0+sp,y0+sp].map(v=>v.toFixed(2)).join(',')+'&WIDTH='+TS+'&HEIGHT='+TS+'&FORMAT='+m.fmt;
+    t.img.src=m.ep+'?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS='+m.layers+'&STYLES=&CRS=EPSG:25832&BBOX='+[x0,y0,x0+sp,y0+sp].map(v=>v.toFixed(2)).join(',')+'&WIDTH='+TS+'&HEIGHT='+TS+'&FORMAT='+m.fmt+(m.extra||'');
     tiles.set(key,t);if(tiles.size>520){const it=tiles.keys();for(let i=0;i<120;i++)tiles.delete(it.next().value)}}
   return t;
 }
@@ -440,7 +461,8 @@ function canvasG(){
   const world=()=>ctx.setTransform(dpr*V.z,0,0,dpr*V.z,dpr*V.x,dpr*V.y);
   const paint=st=>{ctx.globalAlpha=st.alpha??1;if(st.fill){ctx.fillStyle=st.fill;ctx.fill()}
     if(st.stroke){ctx.strokeStyle=st.stroke;ctx.lineWidth=Math.max(st.w||0,.8/V.z);ctx.setLineDash(st.dash||[]);ctx.lineJoin='round';ctx.lineCap='butt';ctx.stroke()}ctx.globalAlpha=1};
-  return{pdf:false,rot:0,mm:x=>x*S.sheet.scale/1000,vis:size=>size*V.z>=4.5,
+  const va=s2w([0,0]),vz=s2w([CW,CH]);
+  return{pdf:false,rot:0,vb:[va[0],va[1],vz[0],vz[1]],mm:x=>x*S.sheet.scale/1000,vis:size=>size*V.z>=4.5,
     path(pts,closed,st){if(pts.length<2)return;world();ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);if(closed)ctx.closePath();paint(st)},
     circle(x,y,r,st){world();ctx.beginPath();ctx.arc(x,y,r,0,7);paint(st)},
     tw(str,size,bold){ctx.font=(bold?600:500)+' 100px '+FONT;return ctx.measureText(str).width/100*size},
@@ -453,7 +475,7 @@ function render(){
   const tgt=70/V.z,steps=[1,2,5,10,20,50,100,200,500,1000,2000,5000],gs=steps.find(s=>s>=tgt)||5000,a=s2w([0,0]),b=s2w([CW,CH]);
   const mp=mapOn();clearTimeout(svT);svT=setTimeout(saveView,600);
   const ak=mp?S.map.k:'';if(ak!==attrKey){attrKey=ak;$('#attr').innerHTML=mp?mp.html:''}
-  if(mp){const want=1/(V.z*dpr);if(want<=260){let li=RES.findIndex(r=>r>=want*.7);if(li<0)li=RES.length-1;const vb=[a[0],a[1],b[0],b[1]];
+  if(mp){const want=1/(V.z*dpr);let li=RES.findIndex(r=>r>=want*.7);if(li<0)li=RES.length-1;if(want<=260&&RES[li]<=(mp.maxRes||200)){const vb=[a[0],a[1],b[0],b[1]];
     ctx.setTransform(dpr*V.z,0,0,dpr*V.z,dpr*V.x,dpr*V.y);ctx.globalAlpha=S.map.alpha??1;
     if(drawTiles(ctx,S.map.k,RES[li],vb,true)){for(let j=Math.min(RES.length-1,li+2);j>li;j--)drawTiles(ctx,S.map.k,RES[j],vb,false);drawTiles(ctx,S.map.k,RES[li],vb,false)}
     ctx.globalAlpha=1;ctx.setTransform(dpr,0,0,dpr,0,0)}}
@@ -602,6 +624,7 @@ function fRng(l,o,k,min,max,step){const i=reg(el=>{o[k]=+el.value});return '<lab
 function bt(l,fn,cls=''){return '<button class="btn sm '+cls+'" data-c="'+reg(fn)+'">'+l+'</button>'}
 function polyLen(o){const D=o.smooth!==undefined?dense(o):o.pts;const c=cum(D);return c[c.length-1]}
 function renderProps(){
+  const ms=$('#mapSel');ms.innerHTML='<option value="none">Hintergrund: keiner</option>'+Object.entries(MAPS).map(([k,v])=>'<option value="'+k+'"'+(S.map.k===k?' selected':'')+'>'+v.n+'</option>').join('');
   HN=[];const P=$('#props'),o=selObj();let h='';
   if(!o){
     const sheets=S.objs.filter(x=>x.t==='sheet').length;
@@ -612,9 +635,9 @@ function renderProps(){
       +fChk('Legende im PDF',S.sheet,'legend')+fChk('Karte / Luftbild mitdrucken',S.sheet,'bgPrint');
     h+='<h3>Plankopf</h3>'+fTxt('Projekt',S.meta,'projekt',{ph:'z. B. A 81, AS Pleidelsheim'})+fTxt('Planinhalt',S.meta,'inhalt')+fTxt('Auftraggeber',S.meta,'ag')+fTxt('Planverfasser',S.meta,'verfasser')
       +fTxt('Bearbeitet',S.meta,'bearb')+fTxt('Plan-Nr.',S.meta,'plannr')+fTxt('Datum',S.meta,'datum');
-    h+='<h3>Darstellung</h3>'+fSel('Stil',S,'style',{farbe:'Farbig',linie:'Strichzeichnung'})+fRng('Flächen deckend',S,'surfAlpha',.15,1,.05);
-    h+='<h3>Kartengrundlage</h3>'+fSel('Live-Karte',S.map,'k',Object.assign({none:'keine'},Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.n]))))+fRng('Deckkraft',S.map,'alpha',.1,1,.05)
-      +'<p>Luftbild für Baden-Württemberg, Karte für ganz Deutschland. Lage in ETRS89 / UTM 32N.</p>';
+    h+='<h3>Darstellung</h3>'+fSel('Stil',S,'style',{plan:'Plangrundlage (grau, Linien schwarz)',farbe:'Farbig',linie:'Strichzeichnung'})+fRng('Flächen deckend',S,'surfAlpha',.15,1,.05);
+    h+='<h3>Kartengrundlage</h3>'+fSel('Hintergrund',S.map,'k',Object.assign({none:'keiner'},Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.n]))),{re:1})+fRng('Deckkraft',S.map,'alpha',.1,1,.05)
+      +'<p>Der Hintergrund dient zum Orientieren und Prüfen. Ins PDF kommt er nur mit dem Haken „Karte / Luftbild mitdrucken". Kataster: '+BASE.length+' Objekte geladen.</p>'+(BASE.length?'<div class="row">'+bt('Kataster entfernen',()=>{BASE=[];persistBase();renderProps();draw()},'warn')+'</div>':'');
     h+='<h3>Eigenes Bild</h3>';
     if(S.bg)h+=fRng('Deckkraft',S.bg,'alpha',.1,1,.05)+'<p>1 Pixel = '+S.bg.mpp.toFixed(3).replace('.',',')+' m, Bildbreite '+(S.bg.w*S.bg.mpp).toFixed(0)+' m.</p><div class="row">'+bt('Neu kalibrieren',()=>setTool('calib'))+bt('Entfernen',()=>{S.bg=null;BGDATA=null;BGIMG=null;persistBg();commit();renderProps();draw()},'warn')+'</div>';
     else h+='<p>Optional: einen gescannten Plan oder ein eigenes Luftbild (PNG, JPG) über die Karte legen und über eine bekannte Strecke kalibrieren.</p><div class="row">'+bt('Eigenes Bild laden',()=>$('#inBg').click())+'</div>';
@@ -623,7 +646,7 @@ function renderProps(){
     if(o.t==='road'){const g=rg(o);
       h+='<p>Länge '+g.len.toFixed(1).replace('.',',')+' m, Breite '+g.W.toFixed(2).replace('.',',')+' m. Der Pfeil am Anfang zeigt die Achsrichtung.</p>'
         +fTxt('Bezeichnung',o,'name',{ph:'z. B. A 81'})
-        +fSel('Querschnitt',o,'preset',Object.fromEntries(Object.entries(PRESET).map(([k,v])=>[k,v.n])),{re:1,after:v=>{const p=PRESET[v];o.kl=p.kl;o.strips=p.s.map(s=>({k:s[0],w:s[1]}));o.lines=p.l.slice();o.axis='m';LAST.road=v}})
+        +fSel('Querschnitt',o,'preset',Object.assign(o.preset==='osm'?{osm:'aus OpenStreetMap übernommen'}:{},Object.fromEntries(Object.entries(PRESET).map(([k,v])=>[k,v.n]))),{re:1,after:v=>{const p=PRESET[v];if(!p)return;o.kl=p.kl;o.strips=p.s.map(s=>({k:s[0],w:s[1]}));o.lines=p.l.slice();o.axis='m';LAST.road=v}})
         +fSel('Markierung nach',o,'kl',Object.fromEntries(Object.entries(KL).map(([k,v])=>[k,v.n+' ('+v.d[0]+'/'+v.d[1]+' m)'])))
         +fChk('Achse ausrunden',o,'smooth');
       h+='<h3>Querschnitt von links nach rechts</h3><div class="xs">';
@@ -634,8 +657,8 @@ function renderProps(){
           +'<button data-c="'+reg(()=>{if(o.strips.length<2)return;o.strips.splice(i,1);o.lines.splice(i+1,1);o.axis='m';commit();renderProps();draw()})+'" title="Streifen entfernen" aria-label="Streifen entfernen">✕</button></div>'});
       h+=lineRow(o.strips.length)+'</div><div class="row">'+bt('Streifen links',()=>{o.strips.unshift({k:'fs',w:3.5});o.lines.unshift('none');commit();renderProps();draw()})
         +bt('Streifen rechts',()=>{o.strips.push({k:'fs',w:3.5});o.lines.push('none');commit();renderProps();draw()})+'</div>';
-      const ax={m:'Mitte des Querschnitts'};g.off.forEach((_,i)=>{ax[i]=i===0?'linker Rand':i===g.off.length-1?'rechter Rand':'zwischen Streifen '+i+' und '+(i+1)});
-      h+=fSel('Achse liegt',o,'axis',ax,{after:v=>{o.axis=v==='m'?'m':+v}});
+      const ax={m:'Mitte des Querschnitts',f:'Mitte der Fahrstreifen'};g.off.forEach((_,i)=>{ax[i]=i===0?'linker Rand':i===g.off.length-1?'rechter Rand':'zwischen Streifen '+i+' und '+(i+1)});
+      h+=fSel('Achse liegt',o,'axis',ax,{after:v=>{o.axis=v==='m'||v==='f'?v:+v}});
       h+='<h3>Stationierung</h3>'+fChk('Stationen anzeigen',o,'stShow')+fNum('Anfang (m)',o,'st0',{step:10})+fNum('Abstand (m)',o,'stInt',{step:10,min:5})
         +fSel('Richtung',o,'stDir',{1:'steigend in Achsrichtung','-1':'fallend in Achsrichtung'},{num:1})+fSel('Schreibweise',o,'stFmt',{km:'km 12,400',plus:'0+100'});
       h+='<div class="row">'+bt('Achsrichtung umkehren',()=>{o.pts.reverse();commit();draw()})+bt('Blätter entlang der Straße',()=>autoSheets(o))+'</div>';
@@ -684,16 +707,16 @@ $('#inBg').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return
     setBg(data,im=>{const ctr=s2w([CW/2,CH/2]),mpp=S.bg?S.bg.mpp:.25;S.bg={x:ctr[0]-im.width*mpp/2,y:ctr[1]-im.height*mpp/2,mpp,w:im.width,h:im.height,alpha:1};S.layers.bg=true;persistBg();commit();sel=null;renderProps();renderTools();fit();setTool('calib')})};
   raw.onerror=()=>toast('Das Bild lässt sich nicht lesen. Verwende PNG oder JPG.');raw.src=rd.result};rd.readAsDataURL(f)};
 $('#inProj').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o||!Array.isArray(o.objs))throw 0;
-  const bd=o.bgData;delete o.bgData;loadState(o);BGDATA=null;BGIMG=null;if(bd&&S.bg)setBg(bd,()=>persistBg());else{S.bg=null;persistBg()}hist=[];hi=-1;commit();renderTools();renderProps();fit();toast('Projekt geladen.')}
+  const bd=o.bgData;delete o.bgData;BASE=Array.isArray(o.base)?o.base:[];delete o.base;loadState(o);persistBase();BGDATA=null;BGIMG=null;if(bd&&S.bg)setBg(bd,()=>persistBg());else{S.bg=null;persistBg()}hist=[];hi=-1;commit();renderTools();renderProps();fit();toast('Projekt geladen.')}
   catch(_){toast('Das ist keine Projektdatei dieses Editors.')}};rd.readAsText(f)};
 $('#bBg').onclick=()=>$('#inBg').click();
 $('#bOpen').onclick=()=>$('#inProj').click();
-$('#bSave').onclick=()=>saveFile(fname()+'.json',JSON.stringify(Object.assign({},S,{bgData:BGDATA})));
+$('#bSave').onclick=()=>saveFile(fname()+'.json',JSON.stringify(Object.assign({},S,{bgData:BGDATA,base:BASE})));
 $('#bCal').onclick=()=>S.bg?setTool('calib'):toast('Kalibrieren gilt nur für ein eigenes Bild. Die Live-Karte ist bereits maßstäblich.');
 $('#bUndo').onclick=()=>undo(-1);$('#bRedo').onclick=()=>undo(1);
 $('#zIn').onclick=()=>zoomAt([CW/2,CH/2],1.4);$('#zOut').onclick=()=>zoomAt([CW/2,CH/2],1/1.4);$('#zFit').onclick=fit;
 $('#bNew').onclick=()=>dialog('<h2>Neuen Plan beginnen?</h2><p>Der aktuelle Plan wird geleert. Speichere ihn vorher als Projektdatei, wenn du ihn behalten willst.</p>',
-  [['Abbrechen'],['Plan leeren',()=>{const m=S.meta,sh=S.sheet;const c=s2w([CW/2,CH/2]),o=S.origin,mp=S.map;S=blank();S.meta.verfasser=m.verfasser;S.sheet=sh;S.map=mp;S.origin={e:Math.round((o.e+c[0])/100)*100,n:Math.round((o.n-c[1])/100)*100};V.x=CW/2-(o.e+c[0]-S.origin.e)*V.z;V.y=CH/2-(o.n-c[1]-S.origin.n)*-1*V.z;BGDATA=null;BGIMG=null;persistBg();sel=null;selV=-1;commit();renderTools();renderProps();draw()},'pri']]);
+  [['Abbrechen'],['Plan leeren',()=>{const m=S.meta,sh=S.sheet;const c=s2w([CW/2,CH/2]),o=S.origin,mp=S.map;BASE=[];persistBase();S=blank();S.meta.verfasser=m.verfasser;S.sheet=sh;S.map=mp;S.origin={e:Math.round((o.e+c[0])/100)*100,n:Math.round((o.n-c[1])/100)*100};V.x=CW/2-(o.e+c[0]-S.origin.e)*V.z;V.y=CH/2-(o.n-c[1]-S.origin.n)*-1*V.z;BGDATA=null;BGIMG=null;persistBg();sel=null;selV=-1;commit();renderTools();renderProps();draw()},'pri']]);
 function renderTools(){
   $('#tools').innerHTML='<h2>Werkzeuge</h2>'+TOOLS.map(t=>'<button class="tool" data-t="'+t[0]+'" aria-pressed="'+(tool===t[0])+'">'+t[1]+'<kbd>'+t[2]+'</kbd></button>').join('')
     +'<h2 style="margin-top:14px">Ebenen</h2><div class="layers">'+LAYERS.map(l=>'<label><input type="checkbox" id="ly_'+l[0]+'" data-l="'+l[0]+'"'+(S.layers[l[0]]?' checked':'')+'>'+l[1]+'</label>').join('')+'</div>';
@@ -701,11 +724,103 @@ function renderTools(){
 $('#tools').addEventListener('click',e=>{const b=e.target.closest('.tool');if(b)setTool(b.dataset.t)});
 $('#tools').addEventListener('change',e=>{const l=e.target.dataset.l;if(l){S.layers[l]=e.target.checked;persist();draw()}});
 
+/* ---------- Grundlage aus Kataster (ALKIS) und OpenStreetMap ---------- */
+function utm32inv(E,N){
+  const a=6378137,f=1/298.257222101,k0=.9996,e2=f*(2-f),ep=e2/(1-e2),e4=e2*e2,e6=e4*e2,x=E-500000,mu=N/k0/(a*(1-e2/4-3*e4/64-5*e6/256)),e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
+  const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
+  const sn=Math.sin(p1),cs=Math.cos(p1),tn=Math.tan(p1),N1=a/Math.sqrt(1-e2*sn*sn),T=tn*tn,C=ep*cs*cs,R=a*(1-e2)/Math.pow(1-e2*sn*sn,1.5),D=x/(N1*k0);
+  const lat=p1-(N1*tn/R)*(D*D/2-(5+3*T+10*C-4*C*C-9*ep)*D**4/24+(61+90*T+298*C+45*T*T-252*ep-3*C*C)*D**6/720);
+  const lon=(D-(1+2*T+C)*D**3/6+(5-2*C+28*T-3*C*C+8*ep+24*T*T)*D**5/120)/cs;
+  return[lat*180/Math.PI,9+lon*180/Math.PI];
+}
+async function wfs(type,b){
+  const o=S.origin,bb=[o.e+b[0],o.n-b[3],o.e+b[2],o.n-b[1]].map(v=>v.toFixed(1)).join(','),N=4000;let out=[];
+  for(let pg=0;pg<5;pg++){const r=await fetch('/wfs/alkis?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES='+type+'&SRSNAME=EPSG:25832&BBOX='+bb+',EPSG:25832&COUNT='+N+'&STARTINDEX='+pg*N+'&OUTPUTFORMAT=application/json');
+    if(!r.ok)throw new Error('Katasterdienst antwortet mit '+r.status);const j=await r.json(),fs=j.features||[];out=out.concat(fs);if(fs.length<N)break}
+  return out;
+}
+function rings(g){if(!g)return[];const c=g.coordinates,t=g.type;return t==='Polygon'?c:t==='MultiPolygon'?c.flat():t==='LineString'?[c]:t==='MultiLineString'?c:[]}
+function flstLab(p){const ks=Object.keys(p),g=re=>{const k=ks.find(x=>re.test(x));return k!=null&&p[k]!=null?String(p[k]):''};
+  let z=g(/^(flurstuecksnummer|flurstuecksnr|flstnr|flurstnr|nummer)$/i);if(!z){const a=g(/zaehler/i),b=g(/nenner/i);z=a?a+(b&&b!=='0'?'/'+b:''):''}return z.replace(/^0+(?=\d)/,'')}
+function nutzK(p){const s=Object.values(p).filter(v=>typeof v==='string').join(' ');return /Stra(ß|ss)enverkehr|\bWeg\b|\bPlatz\b|Bahnverkehr|Verkehrsbegleit/.test(s)?'verk':/[Gg]ewässer|Hafenbecken/.test(s)?'wasser':null}
+function addBase(fs,kf){
+  const have=new Set(BASE.map(it=>it.i)),o=S.origin;let n=0;
+  fs.forEach(f=>{const k=kf(f.properties||{});if(!k||have.has(f.id))return;const r=rings(f.geometry).map(rg=>rg.map(c=>[Math.round((c[0]-o.e)*100)/100,Math.round((o.n-c[1])*100)/100])).filter(rg=>rg.length>1);if(!r.length)return;
+    const b=[1e18,1e18,-1e18,-1e18];r.forEach(rg=>rg.forEach(p=>{b[0]=Math.min(b[0],p[0]);b[1]=Math.min(b[1],p[1]);b[2]=Math.max(b[2],p[0]);b[3]=Math.max(b[3],p[1])}));
+    const it={i:f.id,k,r,b};if(k==='flst'){const t=flstLab(f.properties||{});if(t)it.t=t}BASE.push(it);have.add(f.id);n++});
+  return n;
+}
+const OSMR={motorway:6,trunk:5,primary:4,secondary:3,tertiary:2,unclassified:1,residential:1,living_street:1};
+function osmSection(t){
+  const hw=t.highway,link=/_link$/.test(hw),b=hw.replace('_link',''),ow=t.oneway==='yes'||t.oneway==='1'||t.oneway==='true'||b==='motorway'||t.junction==='roundabout';
+  let n=parseInt(t.lanes)||0;const tagged=n>0;if(!n)n=ow?(b==='motorway'&&!link?2:1):2;n=Math.min(n,8);
+  const ms=parseInt(t.maxspeed)||0,town=['residential','living_street','unclassified'].includes(b)||(ms>0&&ms<=50),kl=(b==='motorway'||(b==='trunk'&&ow))&&!link?'bab':town?'stadt':'land';
+  let w=kl==='bab'?3.75:link?(n===1?4.5:3.5):b==='trunk'||b==='primary'?3.5:b==='secondary'?3.25:b==='tertiary'?3:(n===1?3.5:2.75);
+  const tw=parseFloat(t.width);if(tw>2&&tw<40)w=Math.round(tw/n*20)/20;
+  const s=[],l=[];
+  if(kl==='bab'){s.push({k:'mittel',w:2},{k:'rand',w:.75});l.push('none','none','rand');for(let i=0;i<n;i++){s.push({k:'fs',w});l.push(i<n-1?'leit':'rand')}s.push({k:'seit',w:2.5});l.push('kante')}
+  else{const edge=town?'kante':'rand';l.push(edge);for(let i=0;i<n;i++){s.push({k:'fs',w});if(i<n-1)l.push(ow?'leit':n===2?(tagged||!town?'leit':'none'):(n>=4&&i===n/2-1?'doppel':'leit'))}l.push(edge)}
+  return{kl,strips:s,lines:l,ow,n,rank:(OSMR[b]||1)-(link?.5:0),name:t.ref||t.name||''};
+}
+function osmRoads(els,b){
+  const pad=30,o=S.origin,inb=p=>p[0]>=b[0]-pad&&p[0]<=b[2]+pad&&p[1]>=b[1]-pad&&p[1]<=b[3]+pad,runs=[];
+  els.forEach(w=>{if(w.type!=='way'||!w.geometry||!w.nodes||!w.tags||!w.tags.highway||w.tags.area==='yes')return;const sec=osmSection(w.tags),key=[w.tags.highway,sec.name,sec.n,sec.ow,w.tags.width||''].join('|');let c=null;
+    w.geometry.forEach((g,i)=>{if(!g){c=null;return}const u=utm32(g.lat,g.lon),p=[Math.round((u[0]-o.e)*100)/100,Math.round((o.n-u[1])*100)/100];
+      if(inb(p)){if(!c){c={ids:[],pts:[],sec,key};runs.push(c)}c.ids.push(w.nodes[i]);c.pts.push(p)}else c=null})});
+  const R=runs.filter(r=>r.pts.length>1),ends=new Map(),used=new Set(),out=[];
+  R.forEach((r,i)=>[r.ids[0],r.ids[r.ids.length-1]].forEach(id=>{const k=r.key+'#'+id;if(!ends.has(k))ends.set(k,[]);ends.get(k).push(i)}));
+  R.forEach((r,i)=>{if(used.has(i))return;used.add(i);let ids=r.ids.slice(),pts=r.pts.slice();
+    for(const dir of[1,-1])for(;;){if(ids[0]===ids[ids.length-1])break;const end=dir===1?ids[ids.length-1]:ids[0],c=(ends.get(r.key+'#'+end)||[]).filter(j=>!used.has(j));if(c.length!==1)break;
+      let qi=R[c[0]].ids.slice(),qp=R[c[0]].pts.slice();const hit=()=>dir===1?qi[0]===end:qi[qi.length-1]===end;
+      if(!hit()){if(r.sec.ow)break;qi.reverse();qp.reverse();if(!hit())break}
+      if(dir===1){ids=ids.concat(qi.slice(1));pts=pts.concat(qp.slice(1))}else{ids=qi.slice(0,-1).concat(ids);pts=qp.slice(0,-1).concat(pts)}used.add(c[0])}
+    out.push({pts,sec:r.sec})});
+  return out;
+}
+async function makeBase(b,opt){
+  const res=[],err=[],btn=$('#bBase');btn.disabled=true;
+  const step=async(label,fn)=>{btn.textContent=label+' …';try{await fn()}catch(e){console.error(e);err.push(label+': '+(e.message||'nicht erreichbar'))}};
+  if(opt.kat){
+    await step('Nutzungsflächen',async()=>{addBase(await wfs('nora:v_al_tatsaechliche_nutzung',b),nutzK)});
+    await step('Flurstücke',async()=>{res.push(addBase(await wfs('nora:v_al_flurstueck',b),()=>'flst')+' Flurstücke')});
+    await step('Gebäude',async()=>{res.push(addBase(await wfs('nora:v_al_gebaeude',b),()=>'geb')+' Gebäude')});
+    S.layers.base=true;persistBase();
+  }
+  if(opt.osm)await step('Straßen',async()=>{
+    const o=S.origin,sw=utm32inv(o.e+b[0],o.n-b[3]),ne=utm32inv(o.e+b[2],o.n-b[1]);
+    const q='[out:json][timeout:40];way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street)(_link)?$"]('+[sw[0],sw[1],ne[0],ne[1]].map(v=>v.toFixed(6)).join(',')+');out body geom;';
+    const r=await fetch('/overpass?data='+encodeURIComponent(q));if(!r.ok)throw new Error('OpenStreetMap-Dienst antwortet mit '+r.status);const j=await r.json(),rs=osmRoads(j.elements||[],b);
+    if(opt.repl)S.objs=S.objs.filter(x=>!(x.t==='road'&&x.src==='osm'&&x.pts.some(p=>p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3])));
+    rs.slice(0,800).forEach(x=>S.objs.push({id:uid(),t:'road',src:'osm',pts:x.pts,smooth:true,name:x.sec.name,preset:'osm',kl:x.sec.kl,strips:x.sec.strips,lines:x.sec.lines,axis:'f',rank:x.sec.rank,st0:0,stInt:100,stDir:1,stShow:false,stFmt:x.sec.kl==='bab'?'km':'plus'}));
+    res.push(Math.min(rs.length,800)+' Straßenabschnitte');S.layers.road=true});
+  if(opt.plan)S.style='plan';if(opt.hide&&!err.length)S.map.k='none';
+  btn.disabled=false;btn.textContent='Grundlage erzeugen';sel=null;commit();renderTools();renderProps();draw();
+  toast(err.length?'Nicht alles hat geklappt. '+err.join('; ')+(res.length?'. Übernommen: '+res.join(', ')+'.':''):'Grundlage erzeugt: '+res.join(', ')+'.');
+}
+$('#bBase').onclick=()=>{
+  const a=s2w([0,0]),z=s2w([CW,CH]),vb=[a[0],a[1],z[0],z[1]],sh=S.objs.filter(o=>o.t==='sheet'),cs=sh.flatMap(sheetCorners),
+    sb=sh.length?[Math.min(...cs.map(p=>p[0])),Math.min(...cs.map(p=>p[1])),Math.max(...cs.map(p=>p[0])),Math.max(...cs.map(p=>p[1]))]:null,
+    sz=b=>Math.round(b[2]-b[0])+' × '+Math.round(b[3]-b[1])+' m';
+  dialog('<h2>Grundlage erzeugen</h2><p>Übernimmt für den gewählten Ausschnitt das Kataster als Strichzeichnung und schlägt die Straßen mit Fahrstreifen und Markierung vor. Die Straßen sind ein Vorschlag mit Regelbreiten: bitte gegen das Luftbild prüfen und anpassen.</p>'
+    +'<label class="f" style="margin-top:12px"><span>Ausschnitt</span><select id="gbA"><option value="v">sichtbarer Bildschirmausschnitt ('+sz(vb)+')</option>'+(sb?'<option value="s" selected>alle Blattrahmen ('+sz(sb)+')</option>':'')+'</select></label>'
+    +'<div style="display:flex;flex-direction:column;gap:6px;margin-top:12px">'
+    +'<label class="chk"><input type="checkbox" id="gbK" checked>Kataster übernehmen (Flurstücke, Gebäude, Verkehrsflächen)</label>'
+    +'<label class="chk"><input type="checkbox" id="gbO" checked>Straßen aus OpenStreetMap vorschlagen</label>'
+    +'<label class="chk"><input type="checkbox" id="gbR" checked>früher übernommene Straßen im Ausschnitt ersetzen</label>'
+    +'<label class="chk"><input type="checkbox" id="gbP" checked>Darstellung als Plangrundlage (Fahrbahn grau, Linien schwarz)</label>'
+    +'<label class="chk"><input type="checkbox" id="gbH" checked>Hintergrundkarte danach ausblenden</label></div>'
+    +'<p style="margin-top:10px;font-size:12px">Quellen: Geobasisdaten © LGL Baden-Württemberg (dl-de/by-2-0), Straßen © OpenStreetMap-Mitwirkende (ODbL).</p>',
+    [['Abbrechen'],['Erzeugen',()=>{const b=$('#gbA').value==='s'&&sb?sb:vb,km2=(b[2]-b[0])*(b[3]-b[1])/1e6;
+      if(km2>15){toast('Der Ausschnitt ist mit '+km2.toFixed(1).replace('.',',')+' km² zu groß. Zoome näher heran oder arbeite blattweise (höchstens 15 km²).');return 'keep'}
+      makeBase(b,{kat:$('#gbK').checked,osm:$('#gbO').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
+};
+$('#mapSel').onchange=e=>{S.map.k=e.target.value;S.layers.bg=true;commit();renderTools();renderProps();draw()};
+
 /* ---------- Ortssuche ---------- */
 function goTo(h){
   const[E,N]=utm32(+h.lat,+h.lon);
   $('#q').blur();cv.focus();
-  if(!S.objs.length&&!S.bg)S.origin={e:Math.round(E/100)*100,n:Math.round(N/100)*100};
+  if(!S.objs.length&&!S.bg&&!BASE.length)S.origin={e:Math.round(E/100)*100,n:Math.round(N/100)*100};
   if(S.map.k==='none')S.map.k='dop';S.layers.bg=true;
   V.z=1.6;V.x=CW/2-(E-S.origin.e)*V.z;V.y=CH/2-(S.origin.n-N)*V.z;commit();renderTools();renderProps();draw();
 }
@@ -750,7 +865,8 @@ function pdfG(doc,sh,f){
     if(st.fill)doc.setFillColor(st.fill);
     if(st.stroke){doc.setDrawColor(st.stroke);doc.setLineWidth(Math.max((st.w||0)*k,.08));doc.setLineDashPattern((st.dash||[]).map(d=>Math.max(d*k,.15)),0);doc.setLineCap('butt');doc.setLineJoin('round')}
     fn(st.fill&&st.stroke?'FD':st.fill?'F':'S');if(tr)doc.restoreGraphicsState()};
-  return{pdf:true,rot,mm:x=>x*sc/1000,vis:()=>true,
+  const sc4=sheetCorners(sh);
+  return{pdf:true,rot,vb:[Math.min(...sc4.map(p=>p[0])),Math.min(...sc4.map(p=>p[1])),Math.max(...sc4.map(p=>p[0])),Math.max(...sc4.map(p=>p[1]))],mm:x=>x*sc/1000,vis:()=>true,
     path(pts,closed,st){if(pts.length<2||(!st.fill&&!st.stroke))return;paint(st,m=>{let q=M(pts[0]);doc.moveTo(q[0],q[1]);for(let i=1;i<pts.length;i++){q=M(pts[i]);doc.lineTo(q[0],q[1])}if(closed)doc.close();m==='FD'?doc.fillStroke():m==='F'?doc.fill():doc.stroke()})},
     circle(x,y,r,st){if(!st.fill&&!st.stroke)return;const q=M([x,y]);paint(st,m=>doc.circle(q[0],q[1],r*k,m))},
     tw(str,size,bold){doc.setFont('helvetica',bold?'bold':'normal');return doc.getStringUnitWidth(lat(str))*size},
@@ -790,15 +906,16 @@ function titleBlock(doc,f,i,n,sh){
   doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text('0',bx,by+5,{align:'center'});doc.text(L+' m',bx+lm,by+5,{align:'center'});
 }
 function legend(doc,f){
-  const ci=S.style==='linie'?2:1,mc=S.style==='linie'?'#111111':'#ffffff',E=[],seen=new Set(),add=(key,e)=>{if(!seen.has(key)){seen.add(key);E.push(e)}};
+  const ci=CI(),mc=DK()?'#111111':'#ffffff',E=[],seen=new Set(),add=(key,e)=>{if(!seen.has(key)){seen.add(key);E.push(e)}};
   S.objs.forEach(o=>{if(o.t==='road'){o.strips.forEach(s=>add('s'+STRIP[s.k][0],{f:STRIP[s.k][ci],n:STRIP[s.k][0]}));o.lines.forEach(l=>{if(l&&l!=='none')add('l'+l,{l,n:LINE[l]})})}
     else if(o.t==='line')add('l'+o.k,{l:o.k,n:LINE[o.k]});else if(o.t==='area')add('a'+o.k,{f:AREA[o.k][ci],n:AREA[o.k][0],h:o.k==='sperr'});else if(o.t==='guard')add('g'+o.k,{g:o.k,n:GUARD[o.k]})});
+  if(BASE.length&&S.layers.base){if(BASE.some(it=>it.k==='geb'))E.push({f:'#e8e8e8',n:'Gebäude (Kataster)'});E.push({l:'kante',n:'Flurstücksgrenze',col:'#9c9c9c'})}
   if(!E.length)return;E.sort((a,b)=>(a.f?0:a.l?1:2)-(b.f?0:b.l?1:2));
   const rh=4.6,w=66,h=9+rh*E.length,x=f.ax+3,y=f.ay+3;doc.setFillColor('#ffffff');doc.setDrawColor('#111111');doc.setLineWidth(.25);doc.setLineDashPattern([],0);doc.rect(x,y,w,h,'FD');
   doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor('#111111');doc.text('Legende',x+3,y+5.2);doc.setFont('helvetica','normal');doc.setFontSize(7);
   E.forEach((e,i)=>{const sy=y+8+i*rh,sx=x+3,sw=11,sh=3,my=sy+sh/2;doc.setLineDashPattern([],0);doc.setDrawColor('#777777');doc.setLineWidth(.12);
     if(e.f){doc.setFillColor(e.f);doc.rect(sx,sy,sw,sh,'FD');if(e.h){doc.setDrawColor(mc);doc.setLineWidth(.3);for(let j=1;j<5;j++)doc.line(sx+j*2.2-1,sy+sh,sx+j*2.2+1,sy)}}
-    else if(e.l){const dark=e.l==='bord'||e.l==='kante';doc.setFillColor(dark?'#ffffff':AREA.asphalt[ci]);doc.rect(sx,sy,sw,sh,'FD');doc.setDrawColor(dark?'#3d4249':mc);
+    else if(e.l){const dark=e.l==='bord'||e.l==='kante';doc.setFillColor(dark?'#ffffff':AREA.asphalt[ci]);doc.rect(sx,sy,sw,sh,'FD');doc.setDrawColor(e.col||(dark?'#3d4249':mc));
       const br=['rand','breit','block','halt','warte'].includes(e.l);doc.setLineWidth(br?.7:.3);if(['leit','block','warte','furt'].includes(e.l))doc.setLineDashPattern([1.6,1.4],0);
       if(e.l==='doppel'){doc.line(sx+.5,my-.45,sx+sw-.5,my-.45);doc.line(sx+.5,my+.45,sx+sw-.5,my+.45)}else doc.line(sx+.5,my,sx+sw-.5,my)}
     else{doc.setDrawColor(INK);doc.setFillColor(e.g==='bsw'?'#6a6f77':'#ffffff');
@@ -819,7 +936,9 @@ async function exportPdf(){
       btn.textContent='Blatt '+(i+1)+' von '+sheets.length+' …';
       const img=await bgRaster(sh,f);if(img){doc.addImage(img.data,'JPEG',f.ax,f.ay,f.aw,f.ah,undefined,'FAST');miss+=img.miss}
       doc.saveGraphicsState();doc.rect(f.ax,f.ay,f.aw,f.ah,null);doc.clip();doc.discardPath();scene(pdfG(doc,sh,f));doc.restoreGraphicsState();
-      if(img&&img.att){doc.setFont('helvetica','normal');doc.setFontSize(5.5);const t='Kartengrundlage: '+lat(img.att),w=doc.getTextWidth(t);doc.setFillColor('#ffffff');doc.rect(f.ax+f.aw-w-3,f.ay+f.ah-3.6,w+3,3.6,'F');doc.setTextColor('#333333');doc.text(t,f.ax+f.aw-w-1.5,f.ay+f.ah-1.1)}
+      const atts=[];if(img&&img.att)atts.push('Hintergrund: '+img.att);if(BASE.length&&S.layers.base)atts.push('Geobasisdaten (c) LGL Baden-Wuerttemberg ('+YR+'), dl-de/by-2-0, www.lgl-bw.de');
+      if(S.objs.some(o=>o.src==='osm'))atts.push('Strassen nach (c) OpenStreetMap-Mitwirkende (ODbL)');
+      if(atts.length){doc.setFont('helvetica','normal');doc.setFontSize(5.5);const t=lat(atts.join('  |  ')),w=doc.getTextWidth(t);doc.setFillColor('#ffffff');doc.rect(f.ax+f.aw-w-3,f.ay+f.ah-3.6,w+3,3.6,'F');doc.setTextColor('#333333');doc.text(t,f.ax+f.aw-w-1.5,f.ay+f.ah-1.1)}
       if(S.sheet.legend)legend(doc,f);titleBlock(doc,f,i,sheets.length,sh)}
     if(miss)toast('Achtung: '+miss+' Kartenkacheln fehlen im PDF. Erzeuge es noch einmal, wenn der Kartendienst wieder antwortet.');
     await saveFile(fname()+'_1-'+S.sheet.scale+'.pdf',doc.output('blob'));
@@ -833,6 +952,7 @@ $('#bPdf').onclick=exportPdf;
   let ok=false;
   try{const raw=localStorage.getItem('bps.state');if(raw){loadState(JSON.parse(raw));ok=true;const bd=localStorage.getItem('bps.bg');if(bd&&S.bg)setBg(bd);else if(S.bg)S.bg=null}}catch(e){ok=false}
   if(!ok)S=blank();
+  try{const rb=localStorage.getItem('bps.base');if(rb&&ok)BASE=JSON.parse(rb)||[]}catch(e){BASE=[]}
   hist=[JSON.stringify(S)];hi=0;renderTools();renderProps();hint();
   new ResizeObserver(resize).observe($('#stage'));resize();
   let v=null;try{v=JSON.parse(localStorage.getItem('bps.view'))}catch(e){}
