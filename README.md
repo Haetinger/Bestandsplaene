@@ -7,6 +7,7 @@ Editor für Bestandspläne von Straßenabschnitten als Grundlage für Verkehrsze
 | Datei | Zweck |
 |---|---|
 | `html/index.html` | der Editor (eine Datei, kein Build nötig) |
+| `html/vz.js` | Verkehrszeichenbilder (172 Zeichen nach VzKat, verkleinert); ohne diese Datei zeichnet der Editor vereinfachte Symbole |
 | `nginx.conf` | Webserver und Proxy für Kartendienste und Ortssuche |
 | `proxy-tiles.inc` | gemeinsame Proxy- und Cache-Einstellungen |
 | `docker-compose.yml` | Container-Definition (nginx 1.27) |
