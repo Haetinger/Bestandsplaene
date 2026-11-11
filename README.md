@@ -50,6 +50,7 @@ Die Seite hat keine Anmeldung. Der Proxy spricht zwar nur drei feste Dienste an,
 | Karte | BKG, basemap.de Web Raster, WMS `wms_basemapde` | CC BY 4.0 | `© GeoBasis-DE / BKG (Jahr) CC BY 4.0` |
 | Kataster (Vektor und Bild) | LGL Baden-Württemberg, WFS `WFS_LGL-BW_ALKIS`, WMS `WMS_LGL-BW_ALKIS_Basis_transparent` | Datenlizenz Deutschland - Namensnennung - Version 2.0 | wie Luftbild |
 | Straßenachsen | OpenStreetMap über die Overpass API | ODbL | `© OpenStreetMap-Mitwirkende` |
+| Stationierung Bundesfernstraßen | BASt, BISStra, WFS `bisstra.strasse:sk_stationierung_ab` | laut Metadaten ohne Zugriffsbeschränkung; nicht für Navigation | `Stationierung: BASt (BISStra)` |
 | Ortssuche | Nominatim, OpenStreetMap | ODbL | `© OpenStreetMap-Mitwirkende` |
 
 Der Editor zeigt den Quellenvermerk am Bildschirm und druckt ihn ins PDF.

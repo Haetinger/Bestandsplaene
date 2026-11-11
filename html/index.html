@@ -363,6 +363,7 @@ function signSpec(vz){
   if(n>=278&&n<=282)return{sh:'circ',fill:'#ffffff',edge:'#333333',slash:1};
   if(n===283||n===286)return{sh:'circ',fill:BLUE,edge:RED};
   if(n>=208&&n<=290)return{sh:'circ',fill:'#ffffff',edge:RED,txt:n===274||n===274.1?sub:''};
+  if(n>=386&&n<387)return{sh:'rect',fill:'#7a4a2b',edge:'#ffffff'};
   if(n===306||n===307)return{sh:'dia',fill:YEL,edge:'#ffffff',slash:n===307};
   if(n===310||n===311)return{sh:'rect',fill:YEL,edge:'#111111'};
   if(n===314)return{sh:'sq',fill:BLUE,edge:'#ffffff',txt:'P',tc:'#ffffff'};
@@ -441,7 +442,8 @@ function drawSign(G,o){
   if(sp.bar)G.path(P([[-.6,0],[.6,0]]),0,{stroke:'#ffffff',w:G.mm(.9)});
   if(sp.txt)G.txt(sp.txt,x,y,G.mm(sp.txt.length>2?1.9:2.6),G.rot,sp.tc||'#111111',1);
   }
-  const d=s*1.35+G.mm(2.1);gtext(G,'Z '+o.vz+(o.txt?' · '+o.txt:''),x-Math.sin(G.rot)*d,y+Math.cos(G.rot)*d,{size:G.mm(2.1),box:1});
+  const d=s*1.35+G.mm(2.1);gtext(G,'Z '+o.vz,x-Math.sin(G.rot)*d,y+Math.cos(G.rot)*d,{size:G.mm(2.1),box:1});
+  if(o.txt){const d2=d+G.mm(2.9);gtext(G,o.txt,x-Math.sin(G.rot)*d2,y+Math.cos(G.rot)*d2,{size:G.mm(1.8),box:1,color:'#444444'})}
 }
 function drawSym(G,o){
   const[x,y]=o.p,k=o.k,r=k.startsWith('pf_')||o.rot?(o.rot||0)*Math.PI/180:G.rot,c=Math.cos(r),sn=Math.sin(r),mc=DK()?'#111111':'#ffffff';
@@ -492,8 +494,10 @@ function scene(G){
       for(let s=s0;s<=g.len+1e-6;s+=int){const q=at(g.D,g.c,s),nx=-Math.sin(q.a),ny=Math.cos(q.a),[x,y]=q.p,a=[x+nx*(g.off[0]-G.mm(1.5)),y+ny*(g.off[0]-G.mm(1.5))];
         G.path([a,[x+nx*g.off[last],y+ny*g.off[last]]],0,{stroke:'#b0155a',w:G.mm(.2)});
         gtext(G,fmtSt(st0+dir*s,r.stFmt),a[0]-nx*G.mm(2.2),a[1]-ny*G.mm(2.2),{size:G.mm(2.2),angle:upright(G,q.a),color:'#b0155a',box:1})}}
-    if(r.name&&g.len>G.mm(45)&&(r.src!=='osm'||!hasStr||/^[ABLK]\s?\d/.test(r.name))){const q=at(g.D,g.c,Math.min(g.len/2,Math.max(G.mm(30),g.len*.12))),nx=-Math.sin(q.a),ny=Math.cos(q.a),d=g.off[last]+G.mm(3.5);
-      gtext(G,r.name,q.p[0]+nx*d,q.p[1]+ny*d,{size:G.mm(3.2),angle:upright(G,q.a),bold:1,box:1})}});
+    if(r.name&&g.len>G.mm(45)&&(r.src!=='osm'||!hasStr||/^[ABLK]\s?\d/.test(r.name))){const vb=G.vb,pad=G.mm(12),d=g.off[last]+G.mm(3.5);
+      for(let sx=Math.min(g.len/2,G.mm(30));sx<g.len;sx+=G.mm(150)){const q=at(g.D,g.c,sx),nx=-Math.sin(q.a),ny=Math.cos(q.a),px=q.p[0]+nx*d,py=q.p[1]+ny*d;
+        if(vb&&(px<vb[0]+pad||px>vb[2]-pad||py<vb[1]+pad||py>vb[3]-pad))continue;gtext(G,r.name,px,py,{size:G.mm(3.2),angle:upright(G,q.a),bold:1,box:1})}}});
+  if(L.stat)drawStations(G);
   if(L.sym)by('sym').forEach(o=>drawSym(G,o));
   if(L.sign)by('sign').forEach(o=>drawSign(G,o));
   if(L.dim)by('dim').forEach(o=>{const[a,b]=o.pts,an=Math.atan2(b[1]-a[1],b[0]-a[0]),nx=-Math.sin(an),ny=Math.cos(an),t=G.mm(1.4),st={stroke:'#1c4f8f',w:G.mm(.2)};
@@ -814,10 +818,10 @@ function utm32inv(E,N){
   const lon=(D-(1+2*T+C)*D**3/6+(5-2*C+28*T-3*C*C+8*ep+24*T*T)*D**5/120)/cs;
   return[lat*180/Math.PI,9+lon*180/Math.PI];
 }
-async function wfs(type,b){
+async function wfs(type,b,ep='/wfs/alkis'){
   const o=S.origin,bb=[o.e+b[0],o.n-b[3],o.e+b[2],o.n-b[1]].map(v=>v.toFixed(1)).join(','),N=4000;let out=[];
-  for(let pg=0;pg<5;pg++){const r=await fetch('/wfs/alkis?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES='+type+'&SRSNAME=EPSG:25832&BBOX='+bb+',EPSG:25832&COUNT='+N+'&STARTINDEX='+pg*N+'&OUTPUTFORMAT=application/json');
-    if(!r.ok)throw new Error('Katasterdienst antwortet mit '+r.status);const j=await r.json(),fs=j.features||[];out=out.concat(fs);if(fs.length<N)break}
+  for(let pg=0;pg<5;pg++){const r=await fetch(ep+'?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES='+type+'&SRSNAME=EPSG:25832&BBOX='+bb+',EPSG:25832&COUNT='+N+'&STARTINDEX='+pg*N+'&OUTPUTFORMAT=application/json');
+    if(!r.ok)throw new Error((ep==='/wfs/alkis'?'Katasterdienst':'Dienst der BASt')+' antwortet mit '+r.status);const j=await r.json(),fs=j.features||[];out=out.concat(fs);if(fs.length<N)break}
   return out;
 }
 function rings(g){if(!g)return[];const c=g.coordinates,t=g.type;return t==='Polygon'?c:t==='MultiPolygon'?c.flat():t==='LineString'?[c]:t==='MultiLineString'?c:[]}
@@ -889,7 +893,7 @@ function offRoad(p,geos){ // Schilder stehen nicht in der Fahrbahn: an den näch
 }
 function placeSign(p,geos){ // fester Abstand neben dem Fahrbahnrand der nächsten Straße, Oberkante in Fahrtrichtung
   let b=null;geos.forEach(g=>{const q=proj(g.D,p);if(q.d<35&&(!b||q.d<b.q.d))b={g,q}});if(!b)return{p,rot:0};
-  const g=b.g,sg=b.q.d*b.q.side,lo=g.off[0],hi=g.off[g.off.length-1],right=sg>=(lo+hi)/2,D=(+S.signOff||7)*S.sheet.scale/1000,tgt=right?hi+D:lo-D,c=at(g.D,g.c,b.q.s);
+  const g=b.g,sg=b.q.d*b.q.side,lo=g.off[0],hi=g.off[g.off.length-1],right=g.ow?true:sg>=(lo+hi)/2,D=(+S.signOff||7)*S.sheet.scale/1000,tgt=right?hi+D:lo-D,c=at(g.D,g.c,b.q.s);
   let d=Math.round((g.ow||right?c.a:c.a+Math.PI)*180/Math.PI+90)%360;if(d<=0)d+=360;
   return{p:[Math.round((c.p[0]-Math.sin(c.a)*tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*tgt)*100)/100],rot:d};
 }
@@ -904,8 +908,26 @@ function kmFit(ms){ // Kilometrierung der klassifizierten Straßen aus Kilometer
       Object.assign(x.r,{st0:Math.round(best.m.km*1000-dir*sE),stDir:dir,stFmt:'km',stInt:100,stShow:!(x.r.ow&&dir<0)});n++})});
   return n;
 }
+function addStations(fs,withA){ // amtliche Stationszeichen der Bundesfernstraßen (BASt, BISStra): alle 100 m je Abschnitt
+  const have=new Set(BASE.map(it=>it.i)),o=S.origin;let n=0;
+  fs.forEach(f=>{const pr=f.properties||{},c=f.geometry&&f.geometry.type==='LineString'?f.geometry.coordinates:null;if(!c||c.length<2||have.has(f.id)||pr.station==null)return;
+    if(pr.strassenklasse==='A'&&!withA)return;
+    const p=[c[0][0]-o.e,o.n-c[0][1]],q=[c[1][0]-o.e,o.n-c[1][1]],a=Math.atan2(q[1]-p[1],q[0]-p[0]),nx=-Math.sin(a),ny=Math.cos(a),h=9,R=v=>Math.round(v*100)/100;
+    const A=[R(p[0]-nx*h),R(p[1]-ny*h)],B=[R(p[0]+nx*h),R(p[1]+ny*h)];
+    BASE.push({i:f.id,k:'st',r:[[A,B]],s:+pr.station,m5:+pr.m500===0,sk:String(pr.sk_kennung||''),str:String(pr.str_kennung||''),a:R(a),b:[Math.min(A[0],B[0]),Math.min(A[1],B[1]),Math.max(A[0],B[0]),Math.max(A[1],B[1])]});have.add(f.id);n++});
+  return n;
+}
+const fmtSk=k=>{const m=String(k).match(/^(\d{4})(\d{3})(\w)(\d{4})(\d{3})(\w)$/);return m?'NK '+m[1]+' '+m[2]+' '+m[3]+' – '+m[4]+' '+m[5]+' '+m[6]:String(k)};
+function drawStations(G){
+  const vb=G.vb,sc=S.sheet.scale,col='#b0155a';
+  BASE.forEach(it=>{if(it.k!=='st'||(vb&&(it.b[2]<vb[0]||it.b[0]>vb[2]||it.b[3]<vb[1]||it.b[1]>vb[3])))return;if((sc>1500&&!it.m5)||(sc>6000&&it.s%1000))return;
+    const[A,B]=it.r[0],l=dist(A,B)||1,ux=(A[0]-B[0])/l,uy=(A[1]-B[1])/l,an=upright(G,it.a);
+    G.path([A,B],0,{stroke:col,w:G.mm(it.s===0?.4:.2)});
+    gtext(G,(it.s/1000).toFixed(3).replace('.',','),A[0]+ux*G.mm(2.4),A[1]+uy*G.mm(2.4),{size:G.mm(2.2),angle:an,color:col,box:1});
+    if(it.s===0)gtext(G,it.str.replace(/^([ABLK])(\d)/,'$1 $2')+'  '+fmtSk(it.sk),A[0]+ux*G.mm(5.6),A[1]+uy*G.mm(5.6),{size:G.mm(2.2),angle:an,color:col,bold:1,box:1})});
+}
 function freeSpot(p,rot){ // mehrere Schilder am selben Standort nebeneinander statt übereinander
-  const g=7*S.sheet.scale/1000,a=rot?(rot-90)*Math.PI/180:0;let q=p.slice();
+  const g=9*S.sheet.scale/1000,a=rot?(rot-90)*Math.PI/180:0;let q=p.slice();
   for(let i=0;i<6&&S.objs.some(x=>x.t==='sign'&&dist(x.p,q)<g*.8);i++)q=[Math.round((q[0]+Math.cos(a)*g)*100)/100,Math.round((q[1]+Math.sin(a)*g)*100)/100];
   return q;
 }
@@ -942,7 +964,7 @@ function osmRoads(els,b){
 }
 let PROG=()=>{};
 async function makeBase(b,opt){
-  const res=[],err=[],btn=$('#bBase'),total=(opt.kat?5:0)+(opt.osm||opt.sign||opt.km?1:0)+(opt.mly?1:0);let done=0;btn.disabled=true;btn.textContent='Grundlage wird erzeugt …';
+  const res=[],err=[],btn=$('#bBase'),total=(opt.kat?5:0)+(opt.osm||opt.sign||opt.km?1:0)+(opt.km?1:0)+(opt.mly?1:0);let done=0;btn.disabled=true;btn.textContent='Grundlage wird erzeugt …';
   const show=label=>{$('#prog').style.display='block';$('#progT').textContent='Schritt '+Math.min(done+1,total)+' von '+total+': '+label;$('#progB').style.width=Math.round(done/total*100)+'%'};
   PROG=show;
   const step=async(label,fn)=>{show(label);try{await fn()}catch(e){console.error(e);err.push(label+': '+(e.message||'nicht erreichbar'))}done++;$('#progB').style.width=Math.round(done/total*100)+'%'};
@@ -963,15 +985,19 @@ async function makeBase(b,opt){
     if(opt.osm){const rs=osmRoads(els,b);
       rs.slice(0,800).forEach(x=>S.objs.push({id:uid(),t:'road',src:'osm',ow:x.sec.ow,pts:x.pts,smooth:true,name:x.sec.name,preset:'osm',kl:x.sec.kl,strips:x.sec.strips,lines:x.sec.lines,axis:'f',rank:x.sec.rank,st0:0,stInt:100,stDir:1,stShow:false,stFmt:x.sec.kl==='bab'?'km':'plus'}));
       res.push(Math.min(rs.length,800)+' Straßenabschnitte');S.layers.road=true}
-    if(opt.km){const ms=[];els.forEach(e=>{if(e.type!=='node'||!e.tags||e.tags.highway!=='milestone'||e.lat==null)return;const km=parseFloat(String(e.tags.distance||e.tags.pk||'').replace(',','.'));if(isNaN(km))return;
+    if(opt.km&&S.objs.some(r=>r.t==='road')){const ms=[];els.forEach(e=>{if(e.type!=='node'||!e.tags||e.tags.highway!=='milestone'||e.lat==null)return;const km=parseFloat(String(e.tags.distance||e.tags.pk||'').replace(',','.'));if(isNaN(km))return;
         const u=utm32(e.lat,e.lon);ms.push({p:[u[0]-o.e,o.n-u[1]],km})});
-      const nk=kmFit(ms);res.push(ms.length?'Kilometrierung für '+nk+' Straßenabschnitte aus '+ms.length+' Kilometersteinen':'keine Kilometersteine im Ausschnitt');if(nk)S.layers.stat=true}
+      const nk=kmFit(ms);if(ms.length)res.push('Kilometrierung für '+nk+' Straßenabschnitte aus '+ms.length+' Kilometersteinen');if(nk)S.layers.stat=true}
     if(opt.sign){let ns=0,nl=0;const gap=9*S.sheet.scale/1000,geos=roadGeos();
       els.forEach(e=>{if(e.type!=='node'||!e.tags||e.lat==null)return;const u=utm32(e.lat,e.lon),p=[Math.round((u[0]-o.e)*100)/100,Math.round((o.n-u[1])*100)/100];if(!inb(p))return;const t=e.tags;
         let sg=t.traffic_sign?osmSigns(t.traffic_sign):[];if(!sg.length&&t.highway==='stop')sg=[{vz:'206',txt:''}];if(!sg.length&&t.highway==='give_way')sg=[{vz:'205',txt:''}];
         const pl=opt.orient?placeSign(p,geos):{p:offRoad(p,geos),rot:0},q=pl.p,ro=pl.rot;sg.forEach(x=>{S.objs.push({id:uid(),t:'sign',src:'osm',p:freeSpot(q,ro),vz:x.vz,txt:x.txt,rot:ro});ns++});
         if(t.highway==='traffic_signals'){S.objs.push({id:uid(),t:'sym',src:'osm',k:'lsa',p:q,rot:ro,len:5});nl++}});
       res.push(ns+' Verkehrszeichen, '+nl+' Signalgeber');S.layers.sign=true;S.layers.sym=true}});
+  if(opt.km)await step('Stationierung',async()=>{
+    const hasA=S.objs.some(r=>r.t==='road'&&/^A\s?\d/.test(r.name||'')&&r.stShow&&r.stFmt==='km'&&r.st0);
+    const n=addStations(await wfs('bisstra.strasse:sk_stationierung_ab',b,'/wfs/bisstra'),!hasA);persistBase();
+    res.push(n?n+' amtliche Stationszeichen (Bundesfernstraßen)':'keine amtliche Stationierung im Ausschnitt');if(n)S.layers.stat=true});
   if(opt.mly)await step('Mapillary',async()=>{
     const fs=await mapillary(b,opt.tok),o=S.origin,inb=p=>p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3];let ns=0,nl=0;
     if(opt.repl)S.objs=S.objs.filter(x=>!(x.src==='mly'&&inb(x.p)));
@@ -998,19 +1024,19 @@ $('#bBase').onclick=()=>{
     +'<label class="chk"><input type="checkbox" id="gbO" checked>Straßen aus OpenStreetMap vorschlagen</label>'
     +'<label class="chk"><input type="checkbox" id="gbS" checked>Bestandsbeschilderung aus OpenStreetMap vorschlagen (lückenhaft, Standorte ungefähr)</label>'
     +'<label class="chk"><input type="checkbox" id="gbD" checked>Schilder im festen Abstand neben die Straße setzen und in Fahrtrichtung drehen</label>'
-    +'<label class="chk"><input type="checkbox" id="gbKm" checked>Kilometrierung aus Kilometersteinen ableiten (Autobahnen, Bundes- und Landesstraßen)</label>'
+    +'<label class="chk"><input type="checkbox" id="gbKm" checked>Kilometrierung übernehmen (amtliche Stationierung der Bundesfernstraßen, Kilometersteine aus OpenStreetMap)</label>'
     +'<label class="chk"><input type="checkbox" id="gbM"'+(mtok?' checked':'')+'>Schilder und Ampeln aus Mapillary-Bilderkennung ergänzen (Zugangsschlüssel nötig, höchstens 4 km²)</label>'
     +'<label class="f"><span>Mapillary-Schlüssel</span><input type="text" id="gbT" autocomplete="off" placeholder="MLY|…" value="'+esc(mtok)+'"></label>'
     +'<label class="chk"><input type="checkbox" id="gbR" checked>früher übernommene Straßen und Schilder im Ausschnitt ersetzen</label>'
     +'<label class="chk"><input type="checkbox" id="gbP" checked>Darstellung als Plangrundlage (Fahrbahn grau, Linien schwarz)</label>'
     +'<label class="chk"><input type="checkbox" id="gbH" checked>Hintergrundkarte danach ausblenden</label></div>'
-    +'<p style="margin-top:10px;font-size:12px">Quellen: Geobasisdaten © LGL Baden-Württemberg (dl-de/by-2-0), Straßen und Schilder © OpenStreetMap-Mitwirkende (ODbL), Bilderkennung © Mapillary (CC BY-SA 4.0).</p>',
+    +'<p style="margin-top:10px;font-size:12px">Quellen: Geobasisdaten © LGL Baden-Württemberg (dl-de/by-2-0), Straßen und Schilder © OpenStreetMap-Mitwirkende (ODbL), Bilderkennung © Mapillary (CC BY-SA 4.0), Stationierung: BASt (BISStra).</p>',
     [['Abbrechen'],['Erzeugen',()=>{const b=$('#gbA').value==='s'&&sb?sb:vb,km2=(b[2]-b[0])*(b[3]-b[1])/1e6;
       if(km2>15){toast('Der Ausschnitt ist mit '+km2.toFixed(1).replace('.',',')+' km² zu groß. Zoome näher heran oder arbeite blattweise (höchstens 15 km²).');return 'keep'}
       const tok=$('#gbT').value.trim(),mly=$('#gbM').checked;if(mly&&!tok){toast('Für Mapillary fehlt der Zugangsschlüssel. Trag ihn ein oder nimm den Haken heraus.');return 'keep'}
       if(mly&&km2>4){toast('Mapillary geht nur bis 4 km² pro Durchgang. Zoome näher heran oder nimm den Haken heraus.');return 'keep'}
       try{tok?localStorage.setItem('bps.mly',tok):localStorage.removeItem('bps.mly')}catch(e){}
-      makeBase(b,{mly,tok,orient:$('#gbD').checked,km:$('#gbKm').checked&&$('#gbO').checked,kat:$('#gbK').checked,osm:$('#gbO').checked,sign:$('#gbS').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
+      makeBase(b,{mly,tok,orient:$('#gbD').checked,km:$('#gbKm').checked,kat:$('#gbK').checked,osm:$('#gbO').checked,sign:$('#gbS').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
 };
 $('#mapSel').onchange=e=>{S.map.k=e.target.value;S.layers.bg=true;commit();renderTools();renderProps();draw()};
 
@@ -1142,6 +1168,7 @@ async function exportPdf(){
       doc.saveGraphicsState();doc.rect(f.ax,f.ay,f.aw,f.ah,null);doc.clip();doc.discardPath();scene(pdfG(doc,sh,f));doc.restoreGraphicsState();
       const atts=[];if(img&&img.att)atts.push('Hintergrund: '+img.att);if(BASE.length&&S.layers.base)atts.push('Geobasisdaten (c) LGL Baden-Wuerttemberg ('+YR+'), dl-de/by-2-0, www.lgl-bw.de');
       if(S.objs.some(o=>o.src==='osm'))atts.push('Strassen und Schilder nach (c) OpenStreetMap-Mitwirkende (ODbL)');
+      if(BASE.some(it=>it.k==='st')&&S.layers.stat)atts.push('Stationierung: BASt (BISStra)');
       if(S.objs.some(o=>o.src==='mly'))atts.push('Schilder teils nach (c) Mapillary (CC BY-SA 4.0)');
       if(atts.length){doc.setFont('helvetica','normal');doc.setFontSize(5.5);const t=lat(atts.join('  |  ')),w=doc.getTextWidth(t);doc.setFillColor('#ffffff');doc.rect(f.ax+f.aw-w-3,f.ay+f.ah-3.6,w+3,3.6,'F');doc.setTextColor('#333333');doc.text(t,f.ax+f.aw-w-1.5,f.ay+f.ah-1.1)}
       if(S.sheet.legend)legend(doc,f);titleBlock(doc,f,i,sheets.length,sh)}
