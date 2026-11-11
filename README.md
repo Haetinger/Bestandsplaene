@@ -79,6 +79,8 @@ Die Straßenachsen kommen vom öffentlichen Server overpass-api.de: https://wiki
 - Das Kataster ist amtlich und lagegenau, zeigt aber Grundstücke und Gebäude, keine Fahrbahnränder.
 - Die Straßen sind ein Vorschlag: Achse und Fahrstreifenzahl aus OpenStreetMap, Breiten nach Regelwerten. Vor der Verwendung gegen das Luftbild prüfen und anpassen.
 - Exakte Fahrbahnränder und Markierungen gibt es nur aus einer Bestandsvermessung.
+- Flurstücksnummern, Hausnummern und Straßennamen kommen mit amtlicher Lage und Drehung aus dem Kataster.
+- Die Bestandsbeschilderung ist ein Vorschlag aus OpenStreetMap (Verkehrszeichen, Stopp, Vorfahrt gewähren, Ampeln). Sie ist lückenhaft, die Standorte sind ungefähr und ohne Blickrichtung. Vor Ort oder im Luftbild prüfen.
 
 ## Speicherung
 
