@@ -870,7 +870,7 @@ function mlyVz(v){ // Mapillary-Klasse -> VZ-Nummer; null = nicht übernehmen
   if(/speed-limit-zone/.test(n))return{vz:/^end/.test(n)?'274.2':'274.1'};
   if(c==='warning'&&n==='pedestrians-crossing')return{vz:'133'};
   if(MLY[n])return{vz:MLY[n]};
-  return c==='regulatory'||c==='warning'?{vz:'?',txt:n.replace(/-/g,' ')}:null;
+  return null; // nicht zuordenbare Klassen (Texttafeln, Sonderzeichen) werden nicht übernommen
 }
 async function mapillary(b,tok){
   const o=S.origin,sw=utm32inv(o.e+b[0],o.n-b[3]),ne=utm32inv(o.e+b[2],o.n-b[1]),dLa=.004,dLo=.006,out=[],seen=new Set();let cells=0;
@@ -881,7 +881,7 @@ async function mapillary(b,tok){
     ((await r.json()).data||[]).forEach(f=>{if(f&&f.geometry&&!seen.has(f.id)){seen.add(f.id);out.push(f)}})}
   return out;
 }
-function roadGeos(){return S.objs.filter(r=>r.t==='road').map(r=>Object.assign(rg(r),{ow:!!r.ow})).filter(g=>g.D.length>1)}
+function roadGeos(){return S.objs.filter(r=>r.t==='road').map(r=>Object.assign(rg(r),{ow:!!r.ow,kl:r.kl})).filter(g=>g.D.length>1)}
 function signRot(p,geos){ // Oberkante zeigt in Fahrtrichtung der nächsten Straße (höchstens 30 m entfernt); 0 = aufrecht zum Blatt
   let b=null;geos.forEach(g=>{const q=proj(g.D,p);if(q.d<30&&(!b||q.d<b.q.d))b={g,q}});if(!b)return 0;
   const a=at(b.g.D,b.g.c,b.q.s).a,t=b.g.ow||b.q.side>0?a:a+Math.PI;let d=Math.round(t*180/Math.PI+90)%360;if(d<=0)d+=360;return d;
@@ -892,10 +892,10 @@ function offRoad(p,geos){ // Schilder stehen nicht in der Fahrbahn: an den näch
   if(!best)return p;const c=at(best.g.D,best.g.c,best.q.s);return[Math.round((c.p[0]-Math.sin(c.a)*best.tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*best.tgt)*100)/100];
 }
 function placeSign(p,geos){ // fester Abstand neben dem Fahrbahnrand der nächsten Straße, Oberkante in Fahrtrichtung
-  let b=null;geos.forEach(g=>{const q=proj(g.D,p);if(q.d<35&&(!b||q.d<b.q.d))b={g,q}});if(!b)return{p,rot:0};
+  let b=null;geos.forEach(g=>{const q=proj(g.D,p);if(q.d<35&&(!b||q.d<b.q.d))b={g,q}});if(!b)return{p,rot:0,kl:''};
   const g=b.g,sg=b.q.d*b.q.side,lo=g.off[0],hi=g.off[g.off.length-1],right=g.ow?true:sg>=(lo+hi)/2,D=(+S.signOff||7)*S.sheet.scale/1000,tgt=right?hi+D:lo-D,c=at(g.D,g.c,b.q.s);
   let d=Math.round((g.ow||right?c.a:c.a+Math.PI)*180/Math.PI+90)%360;if(d<=0)d+=360;
-  return{p:[Math.round((c.p[0]-Math.sin(c.a)*tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*tgt)*100)/100],rot:d};
+  return{p:[Math.round((c.p[0]-Math.sin(c.a)*tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*tgt)*100)/100],rot:d,kl:g.kl};
 }
 function arrangeSigns(){const g=roadGeos();S.objs.forEach(x=>{if(x.t==='sign'||(x.t==='sym'&&x.k==='lsa')){const r=placeSign(x.p,g);x.p=[1e9,1e9];x.rot=r.rot;x.p=x.t==='sign'?freeSpot(r.p,r.rot):r.p}})}
 function kmFit(ms){ // Kilometrierung der klassifizierten Straßen aus Kilometersteinen ableiten
@@ -964,6 +964,7 @@ function osmRoads(els,b){
 }
 let PROG=()=>{};
 async function makeBase(b,opt){
+  let noKat=false;
   const res=[],err=[],btn=$('#bBase'),total=(opt.kat?5:0)+(opt.osm||opt.sign||opt.km?1:0)+(opt.km?1:0)+(opt.mly?1:0);let done=0;btn.disabled=true;btn.textContent='Grundlage wird erzeugt …';
   const show=label=>{$('#prog').style.display='block';$('#progT').textContent='Schritt '+Math.min(done+1,total)+' von '+total+': '+label;$('#progB').style.width=Math.round(done/total*100)+'%'};
   PROG=show;
@@ -975,6 +976,7 @@ async function makeBase(b,opt){
     await step('Flurstücksnummern',async()=>{addLabels(await wfs('nora:v_al_label_nummer1',b),p=>p.art==='ZAE_NEN'?'flst':p.art==='HNR'?'hnr':null)});
     await step('Straßennamen',async()=>{res.push(addLabels(await wfs('nora:v_al_label_name2',b),()=>'str')+' Straßennamen')});
     S.layers.base=true;persistBase();
+    if(!BASE.some(it=>it.k==='flst')&&!err.length){noKat=true;res.push('kein Kataster (der Dienst deckt nur Baden-Württemberg ab), stattdessen graue Karte als Hintergrund')}
   }
   if(opt.osm||opt.sign||opt.km)await step(opt.osm?'Straßen':'Beschilderung',async()=>{
     const o=S.origin,sw=utm32inv(o.e+b[0],o.n-b[3]),ne=utm32inv(o.e+b[2],o.n-b[1]),bb='('+[sw[0],sw[1],ne[0],ne[1]].map(v=>v.toFixed(6)).join(',')+');';
@@ -1004,10 +1006,15 @@ async function makeBase(b,opt){
     const cand=[],geos=roadGeos();
     fs.forEach(f=>{const u=utm32(f.geometry.coordinates[1],f.geometry.coordinates[0]),p=[u[0]-o.e,o.n-u[1]],v=String(f.object_value||'');if(!inb(p))return;
       if(/^object--traffic-light/.test(v)){cand.push({key:'lsa',p});return}const z=mlyVz(v);if(z)cand.push({key:z.vz+'|'+(z.txt||''),vz:z.vz,txt:z.txt||'',p})});
-    cluster(cand.filter(c=>c.key==='lsa'),12).forEach(c=>{const pl=opt.orient?placeSign(c.p,geos):{p:offRoad(c.p,geos),rot:0},p=pl.p;if(S.objs.some(x=>x.t==='sym'&&x.k==='lsa'&&dist(x.p,p)<12))return;S.objs.push({id:uid(),t:'sym',src:'mly',k:'lsa',p,rot:pl.rot,len:5});nl++});
-    cluster(cand.filter(c=>c.key!=='lsa'),18).forEach(c=>{const pl=opt.orient?placeSign(c.p,geos):{p:offRoad(c.p,geos),rot:0},p=pl.p;if(S.objs.some(x=>x.t==='sign'&&x.vz===c.vz&&dist(x.p,p)<18))return;const ro=pl.rot;S.objs.push({id:uid(),t:'sign',src:'mly',p:freeSpot(p,ro),vz:c.vz,txt:c.txt,rot:ro});ns++});
+    // Zeichen, die an der Hauptfahrbahn einer Autobahn nicht stehen: dort fast immer Fehlerkennungen (Pfeile auf Wegweisern, Lkw-Aufdrucke)
+    const NOBAB=/^(205|206|209|211|214|215|220|222|237|239|240|241|245|250|267|283|286|314|350|357|133|136|138)(-|$)/;let drop=0;
+    cluster(cand.filter(c=>c.key==='lsa'),12).forEach(c=>{const pk=placeSign(c.p,geos);if(opt.plaus&&pk.kl==='bab'){drop++;return}const pl=opt.orient?pk:{p:offRoad(c.p,geos),rot:0},p=pl.p;
+      if(S.objs.some(x=>x.t==='sym'&&x.k==='lsa'&&dist(x.p,p)<12))return;S.objs.push({id:uid(),t:'sym',src:'mly',k:'lsa',p,rot:pl.rot,len:5});nl++});
+    cluster(cand.filter(c=>c.key!=='lsa'),40).forEach(c=>{const pk=placeSign(c.p,geos);if(opt.plaus&&pk.kl==='bab'&&NOBAB.test(c.vz)){drop++;return}const pl=opt.orient?pk:{p:offRoad(c.p,geos),rot:0},p=pl.p;
+      if(S.objs.some(x=>x.t==='sign'&&x.vz===c.vz&&dist(x.p,p)<40))return;const ro=pl.rot;S.objs.push({id:uid(),t:'sign',src:'mly',p:freeSpot(p,ro),vz:c.vz,txt:c.txt,rot:ro});ns++});
+    if(drop)res.push(drop+' unplausible Erkennungen an Autobahnen verworfen');
     res.push('aus Mapillary '+ns+' Verkehrszeichen und '+nl+' Signalgeber');S.layers.sign=true;S.layers.sym=true});
-  if(opt.plan)S.style='plan';if(opt.hide&&!err.length)S.map.k='none';
+  if(opt.plan)S.style='plan';if(noKat){S.map.k='grau';S.map.alpha=.6;S.sheet.bgPrint=true;S.layers.bg=true}else if(opt.hide&&!err.length)S.map.k='none';
   $('#progT').textContent='Fertig';await new Promise(r=>setTimeout(r,500));$('#prog').style.display='none';
   btn.disabled=false;btn.textContent='Grundlage erzeugen';sel=null;commit();renderTools();renderProps();draw();
   toast(err.length?'Nicht alles hat geklappt. '+err.join('; ')+(res.length?'. Übernommen: '+res.join(', ')+'.':''):'Grundlage erzeugt: '+res.join(', ')+'.');
@@ -1026,6 +1033,7 @@ $('#bBase').onclick=()=>{
     +'<label class="chk"><input type="checkbox" id="gbD" checked>Schilder im festen Abstand neben die Straße setzen und in Fahrtrichtung drehen</label>'
     +'<label class="chk"><input type="checkbox" id="gbKm" checked>Kilometrierung übernehmen (amtliche Stationierung der Bundesfernstraßen, Kilometersteine aus OpenStreetMap)</label>'
     +'<label class="chk"><input type="checkbox" id="gbM"'+(mtok?' checked':'')+'>Schilder und Ampeln aus Mapillary-Bilderkennung ergänzen (Zugangsschlüssel nötig, höchstens 4 km²)</label>'
+    +'<label class="chk"><input type="checkbox" id="gbPl" checked>Mapillary: unplausible Erkennungen an Autobahn-Hauptfahrbahnen verwerfen</label>'
     +'<label class="f"><span>Mapillary-Schlüssel</span><input type="text" id="gbT" autocomplete="off" placeholder="MLY|…" value="'+esc(mtok)+'"></label>'
     +'<label class="chk"><input type="checkbox" id="gbR" checked>früher übernommene Straßen und Schilder im Ausschnitt ersetzen</label>'
     +'<label class="chk"><input type="checkbox" id="gbP" checked>Darstellung als Plangrundlage (Fahrbahn grau, Linien schwarz)</label>'
@@ -1036,7 +1044,7 @@ $('#bBase').onclick=()=>{
       const tok=$('#gbT').value.trim(),mly=$('#gbM').checked;if(mly&&!tok){toast('Für Mapillary fehlt der Zugangsschlüssel. Trag ihn ein oder nimm den Haken heraus.');return 'keep'}
       if(mly&&km2>4){toast('Mapillary geht nur bis 4 km² pro Durchgang. Zoome näher heran oder nimm den Haken heraus.');return 'keep'}
       try{tok?localStorage.setItem('bps.mly',tok):localStorage.removeItem('bps.mly')}catch(e){}
-      makeBase(b,{mly,tok,orient:$('#gbD').checked,km:$('#gbKm').checked,kat:$('#gbK').checked,osm:$('#gbO').checked,sign:$('#gbS').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
+      makeBase(b,{mly,tok,plaus:$('#gbPl').checked,orient:$('#gbD').checked,km:$('#gbKm').checked,kat:$('#gbK').checked,osm:$('#gbO').checked,sign:$('#gbS').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
 };
 $('#mapSel').onchange=e=>{S.map.k=e.target.value;S.layers.bg=true;commit();renderTools();renderProps();draw()};
 
