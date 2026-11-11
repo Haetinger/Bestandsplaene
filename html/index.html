@@ -50,6 +50,10 @@ button{cursor:pointer}
 .attr{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:#ffffffd9;color:#18212e;border-radius:4px;padding:3px 9px;font-size:11px;max-width:46%;text-align:center}
 .attr a{color:inherit}
 .attr:empty{display:none}
+.prog{position:absolute;left:50%;top:14px;transform:translateX(-50%);width:min(440px,80%);background:#18212ef2;color:#fff;border-radius:6px;padding:10px 14px 12px;font-size:13px;display:none;z-index:5}
+.prog b{display:block;font-weight:600;margin-bottom:7px}
+.prog i{display:block;height:8px;border-radius:4px;background:#ffffff33;overflow:hidden}
+.prog i u{display:block;height:100%;width:0;background:var(--hi);transition:width .25s}
 .hits{display:flex;flex-direction:column;gap:6px}
 .hits .btn{text-align:left;white-space:normal}
 
@@ -156,6 +160,7 @@ th{font:600 12px var(--display);letter-spacing:.08em;text-transform:uppercase;co
     <div class="hint" id="hint"></div>
     <div class="status" id="status"></div>
     <div class="attr" id="attr"></div>
+    <div class="prog" id="prog" role="status" aria-live="polite"><b id="progT"></b><i><u id="progB"></u></i></div>
     <div class="zoom">
       <button class="btn" id="zOut" title="Verkleinern">−</button>
       <button class="btn" id="zFit" title="Alles zeigen">Alles</button>
@@ -347,14 +352,16 @@ function drawGuard(G,o){
 }
 function signSpec(vz){
   const n=parseFloat(vz)||0,sub=(String(vz).split('-')[1]||'');
+  if(vz==='?')return{sh:'rect',fill:'#ffffff',edge:'#111111',txt:'?'};
+  if(n===220)return{sh:'rect',fill:BLUE,edge:'#ffffff'};
   if(n===205)return{sh:'trid',fill:'#ffffff',edge:RED};
   if(n===206)return{sh:'oct',fill:RED,edge:'#ffffff',txt:'STOP',tc:'#ffffff'};
   if(n>=101&&n<200||n===301)return{sh:'tri',fill:'#ffffff',edge:RED};
   if(n>=209&&n<=222||n>=237&&n<=245)return{sh:'circ',fill:BLUE,edge:'#ffffff'};
   if(n===267)return{sh:'circ',fill:RED,edge:'#ffffff',bar:1};
   if(n>=278&&n<=282)return{sh:'circ',fill:'#ffffff',edge:'#333333',slash:1};
-  if(n===283||n===286)return{sh:'circ',fill:BLUE,edge:RED,slash:1,sc:RED};
-  if(n>=208&&n<=290)return{sh:'circ',fill:'#ffffff',edge:RED,txt:n===274?sub:''};
+  if(n===283||n===286)return{sh:'circ',fill:BLUE,edge:RED};
+  if(n>=208&&n<=290)return{sh:'circ',fill:'#ffffff',edge:RED,txt:n===274||n===274.1?sub:''};
   if(n===306||n===307)return{sh:'dia',fill:YEL,edge:'#ffffff',slash:n===307};
   if(n===310||n===311)return{sh:'rect',fill:YEL,edge:'#111111'};
   if(n===314)return{sh:'sq',fill:BLUE,edge:'#ffffff',txt:'P',tc:'#ffffff'};
@@ -363,8 +370,27 @@ function signSpec(vz){
   if(n>=600&&n<700)return{sh:'rect',fill:'#ffffff',edge:RED};
   return{sh:'rect',fill:'#ffffff',edge:'#111111'};
 }
+function signPic(vz){ // vereinfachte Sinnbilder in Einheitskoordinaten (Zeichenradius 1)
+  const n=parseFloat(vz)||0,sub=String(vz).split('-')[1]||'',L=sub==='10',m=p=>p.map(([u,v])=>[-u,v]),A=p=>['arrow',L?m(p):p],K='#111111';
+  if(n===209)return sub==='30'?[['arrow',[[0,.55],[0,-.4]]]]:[A([[-.4,.5],[-.4,-.05],[.38,-.05]])];
+  if(n===211)return[A([[-.5,0],[.38,0]])];
+  if(n===214)return sub==='30'?[['arrow',[[0,.55],[0,0],[.4,0]]],['arrow',[[0,0],[-.4,0]]]]:[A([[-.2,.55],[-.2,-.4]]),A([[-.2,.15],[.38,.15]])];
+  if(n===222)return[A([[-.38,-.38],[.3,.3]])];
+  if(n===220)return[['arrow',sub==='10'?[[.95,0],[-.85,0]]:[[-.95,0],[.85,0]]]];
+  if(n===215)return[['ring',.42]];
+  if(n===283)return[['line',[[-.66,-.66],[.66,.66]],RED,.2],['line',[[-.66,.66],[.66,-.66]],RED,.2]];
+  if(n===286)return[['line',[[-.66,-.66],[.66,.66]],RED,.2]];
+  if(n===101)return[['txt','!']];
+  if(n===131)return[['dot',[0,-.12],.15,'#e53935'],['dot',[0,.2],.15,'#f2b400'],['dot',[0,.52],.15,'#43a047']];
+  if(n===123)return[['poly',[[-.5,.6],[.25,.6],[-.1,.1]],K]];
+  if(n===253)return[['poly',[[-.55,-.2],[.1,-.2],[.1,.3],[-.55,.3]],K],['poly',[[.16,0],[.52,0],[.52,.3],[.16,.3]],K]];
+  if(n===276||n===277)return[['poly',[[-.6,-.15],[-.1,-.15],[-.1,.25],[-.6,.25]],RED],['poly',[[.1,-.15],[.6,-.15],[.6,.25],[.1,.25]],K]];
+  if(n===350)return[['poly',[[0,-.6],[.62,.55],[-.62,.55]],'#ffffff']];
+  if(n===357)return[['line',[[0,.75],[0,-.2]],'#ffffff',.3],['line',[[-.45,-.35],[.45,-.35]],RED,.3]];
+  return[];
+}
 function drawSign(G,o){
-  const s=G.mm(3.2),[x,y]=o.p,sp=signSpec(o.vz),r=(o.rot||0)*Math.PI/180,c=Math.cos(r),sn=Math.sin(r);
+  const s=G.mm(3.2),[x,y]=o.p,sp=signSpec(o.vz),r=o.rot?o.rot*Math.PI/180:G.rot,c=Math.cos(r),sn=Math.sin(r);
   const P=a=>a.map(([u,v])=>[x+(u*c-v*sn)*s,y+(u*sn+v*c)*s]),st={fill:sp.fill,stroke:sp.edge,w:G.mm(sp.edge===RED?.75:.3)};
   const out={stroke:'#22272e',w:G.mm(.12)};
   const SH={tri:[[0,-1.15],[1.2,.85],[-1.2,.85]],trid:[[0,1.15],[1.2,-.85],[-1.2,-.85]],dia:[[0,-1.2],[1.2,0],[0,1.2],[-1.2,0]],
@@ -372,6 +398,14 @@ function drawSign(G,o){
     oct:[...Array(8)].map((_,i)=>[Math.cos((i+.5)*Math.PI/4)*1.1,Math.sin((i+.5)*Math.PI/4)*1.1])};
   if(sp.sh==='circ'){G.circle(x,y,s,st);G.circle(x,y,s+G.mm(.4),out)}
   else{G.path(P(SH[sp.sh]),1,st);G.path(P(SH[sp.sh].map(([u,v])=>[u*1.13,v*1.13])),1,out)}
+  signPic(o.vz).forEach(q=>{const col=q[2]||'#ffffff';
+    if(q[0]==='arrow'){const pts=q[1],k=pts.length,a=pts[k-2],b=pts[k-1],l=Math.hypot(b[0]-a[0],b[1]-a[1])||1,ux=(b[0]-a[0])/l,uy=(b[1]-a[1])/l;G.path(P(pts),0,{stroke:'#ffffff',w:s*.2});
+      G.path(P([[b[0]+ux*.24,b[1]+uy*.24],[b[0]-ux*.14-uy*.26,b[1]-uy*.14+ux*.26],[b[0]-ux*.14+uy*.26,b[1]-uy*.14-ux*.26]]),1,{fill:'#ffffff'})}
+    else if(q[0]==='line')G.path(P(q[1]),0,{stroke:col,w:s*(q[3]||.2)});
+    else if(q[0]==='poly')G.path(P(q[1]),1,{fill:col});
+    else if(q[0]==='dot'){const d=P([q[1]])[0];G.circle(d[0],d[1],s*q[2],{fill:q[3]})}
+    else if(q[0]==='ring')G.circle(x,y,s*q[1],{stroke:'#ffffff',w:s*.16});
+    else if(q[0]==='txt')G.txt(q[1],x,y+s*.15*Math.cos(G.rot),G.mm(3),G.rot,'#111111',1)});
   if(sp.slash)G.path(P([[-.68,.68],[.68,-.68]]),0,{stroke:sp.sc||'#333333',w:G.mm(.5)});
   if(sp.bar)G.path(P([[-.6,0],[.6,0]]),0,{stroke:'#ffffff',w:G.mm(.9)});
   if(sp.txt)G.txt(sp.txt,x,y,G.mm(sp.txt.length>2?1.9:2.6),G.rot,sp.tc||'#111111',1);
@@ -648,6 +682,8 @@ function renderProps(){
     h+='<h3>Darstellung</h3>'+fSel('Stil',S,'style',{plan:'Plangrundlage (grau, Linien schwarz)',farbe:'Farbig',linie:'Strichzeichnung'})+fRng('Flächen deckend',S,'surfAlpha',.15,1,.05);
     h+='<h3>Kartengrundlage</h3>'+fSel('Hintergrund',S.map,'k',Object.assign({none:'keiner'},Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.n]))),{re:1})+fRng('Deckkraft',S.map,'alpha',.1,1,.05)
       +'<p>Der Hintergrund dient zum Orientieren und Prüfen. Ins PDF kommt er nur mit dem Haken „Karte / Luftbild mitdrucken". Kataster: '+BASE.length+' Objekte geladen.</p>'+(BASE.length?'<div class="row">'+bt('Kataster entfernen',()=>{BASE=[];persistBase();renderProps();draw()},'warn')+'</div>':'');
+    const nAuto=S.objs.filter(x=>x.src&&(x.t==='sign'||x.t==='sym')).length;
+    if(nAuto)h+='<p>'+nAuto+' automatisch übernommene Schilder und Signalgeber im Plan.</p><div class="row">'+bt('Übernommene Schilder entfernen',()=>{S.objs=S.objs.filter(x=>!(x.src&&(x.t==='sign'||x.t==='sym')));commit();renderProps();draw()},'warn')+'</div>';
     h+='<h3>Eigenes Bild</h3>';
     if(S.bg)h+=fRng('Deckkraft',S.bg,'alpha',.1,1,.05)+'<p>1 Pixel = '+S.bg.mpp.toFixed(3).replace('.',',')+' m, Bildbreite '+(S.bg.w*S.bg.mpp).toFixed(0)+' m.</p><div class="row">'+bt('Neu kalibrieren',()=>setTool('calib'))+bt('Entfernen',()=>{S.bg=null;BGDATA=null;BGIMG=null;persistBg();commit();renderProps();draw()},'warn')+'</div>';
     else h+='<p>Optional: einen gescannten Plan oder ein eigenes Luftbild (PNG, JPG) über die Karte legen und über eine bekannte Strecke kalibrieren.</p><div class="row">'+bt('Eigenes Bild laden',()=>$('#inBg').click())+'</div>';
@@ -679,7 +715,7 @@ function renderProps(){
         +(o.k==='sp'?fSel('Pfostenseite',o,'side',{1:'rechts',"-1":'links'},{num:1}):'')+(o.k==='leitpf'?fNum('Abstand (m)',o,'int',{step:5,min:5}):'')+fChk('Ausrunden',o,'smooth');
     }else if(o.t==='sign'){h+=fTxt('VZ-Nummer',o,'vz',{list:'vzl',after:v=>{LAST.sign=v;const n=$('#vzn');if(n)n.textContent=VZ[v]||'Freie Nummer, Symbol nach Zeichengruppe.'}})
         +'<datalist id="vzl">'+Object.entries(VZ).map(([k,n])=>'<option value="'+k+'">'+esc(n)+'</option>').join('')+'</datalist><p id="vzn">'+esc(VZ[o.vz]||'Freie Nummer, Symbol nach Zeichengruppe.')+'</p>'
-        +fTxt('Zusatz',o,'txt',{ph:'z. B. ZZ 1004-31, 400 m'})+fNum('Drehung (Grad)',o,'rot',{step:15})+'<p>Die Symbole sind vereinfacht. Maßgebend ist die VZ-Nummer.</p>';
+        +fTxt('Zusatz',o,'txt',{ph:'z. B. ZZ 1004-31, 400 m'})+fNum('Drehung (Grad)',o,'rot',{step:15})+'<p>Drehung 0 heißt: steht aufrecht zum Blatt. Die Symbole sind vereinfacht, maßgebend ist die VZ-Nummer.'+(o.src?' Aus '+(o.src==='mly'?'Mapillary':'OpenStreetMap')+' übernommen, Standort ungefähr.':'')+'</p>';
     }else if(o.t==='sym'){h+=fSel('Symbol',o,'k',SYM,{re:1,after:v=>LAST.sym=v})+fNum('Drehung (Grad)',o,'rot',{step:15})+(o.k.startsWith('pf_')?fNum('Länge (m)',o,'len',{step:.5,min:1}):o.k==='baum'?fNum('Kronenradius (m)',o,'len',{step:.5,min:.5}):'');
     }else if(o.t==='text'){h+=fTxt('Text',o,'s')+fNum('Schrifthöhe (mm)',o,'size',{step:.5,min:1.5})+fNum('Drehung (Grad)',o,'rot',{step:15})+fChk('Fett',o,'bold')+fChk('Weiß hinterlegt',o,'box');
     }else if(o.t==='dim'){h+='<p>Gemessene Länge: '+dist(o.pts[0],o.pts[1]).toFixed(2).replace('.',',')+' m. Ziehe die Endpunkte, sie rasten an Stützpunkten ein.</p>';
@@ -768,7 +804,7 @@ function addLabels(fs,pick){
 }
 async function overpass(q){
   let last=0;
-  for(let i=0;i<3;i++){if(i){$('#bBase').textContent='OpenStreetMap, Versuch '+(i+1)+' …';await new Promise(r=>setTimeout(r,i*7000))}
+  for(let i=0;i<3;i++){if(i){PROG('OpenStreetMap überlastet, Versuch '+(i+1)+' von 3');await new Promise(r=>setTimeout(r,i*7000))}
     const r=await fetch('/overpass?data='+encodeURIComponent(q));if(r.ok)return r.json();last=r.status;if(![429,502,503,504].includes(last))break}
   throw new Error('OpenStreetMap-Dienst überlastet oder nicht erreichbar ('+last+'), bitte später noch einmal versuchen');
 }
@@ -800,11 +836,21 @@ function mlyVz(v){ // Mapillary-Klasse -> VZ-Nummer; null = nicht übernehmen
 async function mapillary(b,tok){
   const o=S.origin,sw=utm32inv(o.e+b[0],o.n-b[3]),ne=utm32inv(o.e+b[2],o.n-b[1]),dLa=.004,dLo=.006,out=[],seen=new Set();let cells=0;
   for(let la=sw[0];la<ne[0];la+=dLa)for(let lo=sw[1];lo<ne[1];lo+=dLo){
-    $('#bBase').textContent='Mapillary, Feld '+(++cells)+' …';
+    PROG('Mapillary, Teilfläche '+(++cells));
     const r=await fetch('/mapillary?access_token='+encodeURIComponent(tok)+'&fields=id,object_value,geometry&bbox='+[lo,la,Math.min(lo+dLo,ne[1]),Math.min(la+dLa,ne[0])].map(v=>v.toFixed(6)).join(','));
     if(r.status===400||r.status===401||r.status===403)throw new Error('Zugangsschlüssel wird nicht angenommen ('+r.status+')');if(!r.ok)throw new Error('Dienst antwortet mit '+r.status);
     ((await r.json()).data||[]).forEach(f=>{if(f&&f.geometry&&!seen.has(f.id)){seen.add(f.id);out.push(f)}})}
   return out;
+}
+function roadGeos(){return S.objs.filter(r=>r.t==='road').map(rg).filter(g=>g.D.length>1)}
+function offRoad(p,geos){ // Schilder stehen nicht in der Fahrbahn: an den nächsten Rand plus 1 m schieben
+  let best=null;geos.forEach(g=>{const q=proj(g.D,p);if(q.s<.5||q.s>g.len-.5)return;const sg=q.d*q.side,lo=g.off[0],hi=g.off[g.off.length-1];
+    if(sg>lo-.4&&sg<hi+.4){const tgt=sg-lo<hi-sg?lo-1:hi+1,m=Math.abs(tgt-sg);if(!best||m<best.m)best={m,g,q,tgt}}});
+  if(!best)return p;const c=at(best.g.D,best.g.c,best.q.s);return[Math.round((c.p[0]-Math.sin(c.a)*best.tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*best.tgt)*100)/100];
+}
+function cluster(items,rad){ // gleiche Erkennungen in der Nähe zu einem Standort zusammenfassen
+  const cl=[];items.forEach(it=>{const c=cl.find(c=>c.key===it.key&&dist([c.x/c.n,c.y/c.n],it.p)<rad);if(c){c.x+=it.p[0];c.y+=it.p[1];c.n++}else cl.push({key:it.key,x:it.p[0],y:it.p[1],n:1,it})});
+  return cl.map(c=>Object.assign({},c.it,{p:[c.x/c.n,c.y/c.n],n:c.n}));
 }
 const OSMR={motorway:6,trunk:5,primary:4,secondary:3,tertiary:2,unclassified:1,residential:1,living_street:1};
 function osmSection(t){
@@ -833,9 +879,12 @@ function osmRoads(els,b){
     out.push({pts,sec:r.sec})});
   return out;
 }
+let PROG=()=>{};
 async function makeBase(b,opt){
-  const res=[],err=[],btn=$('#bBase');btn.disabled=true;
-  const step=async(label,fn)=>{btn.textContent=label+' …';try{await fn()}catch(e){console.error(e);err.push(label+': '+(e.message||'nicht erreichbar'))}};
+  const res=[],err=[],btn=$('#bBase'),total=(opt.kat?5:0)+(opt.osm||opt.sign?1:0)+(opt.mly?1:0);let done=0;btn.disabled=true;btn.textContent='Grundlage wird erzeugt …';
+  const show=label=>{$('#prog').style.display='block';$('#progT').textContent='Schritt '+Math.min(done+1,total)+' von '+total+': '+label;$('#progB').style.width=Math.round(done/total*100)+'%'};
+  PROG=show;
+  const step=async(label,fn)=>{show(label);try{await fn()}catch(e){console.error(e);err.push(label+': '+(e.message||'nicht erreichbar'))}done++;$('#progB').style.width=Math.round(done/total*100)+'%'};
   if(opt.kat){
     await step('Nutzungsflächen',async()=>{addBase(await wfs('nora:v_al_tatsaechliche_nutzung',b),nutzK)});
     await step('Flurstücke',async()=>{res.push(addBase(await wfs('nora:v_al_flurstueck',b),()=>'flst')+' Flurstücke')});
@@ -853,20 +902,23 @@ async function makeBase(b,opt){
     if(opt.osm){const rs=osmRoads(els,b);
       rs.slice(0,800).forEach(x=>S.objs.push({id:uid(),t:'road',src:'osm',pts:x.pts,smooth:true,name:x.sec.name,preset:'osm',kl:x.sec.kl,strips:x.sec.strips,lines:x.sec.lines,axis:'f',rank:x.sec.rank,st0:0,stInt:100,stDir:1,stShow:false,stFmt:x.sec.kl==='bab'?'km':'plus'}));
       res.push(Math.min(rs.length,800)+' Straßenabschnitte');S.layers.road=true}
-    if(opt.sign){let ns=0,nl=0;const gap=9*S.sheet.scale/1000;
+    if(opt.sign){let ns=0,nl=0;const gap=9*S.sheet.scale/1000,geos=roadGeos();
       els.forEach(e=>{if(e.type!=='node'||!e.tags||e.lat==null)return;const u=utm32(e.lat,e.lon),p=[Math.round((u[0]-o.e)*100)/100,Math.round((o.n-u[1])*100)/100];if(!inb(p))return;const t=e.tags;
         let sg=t.traffic_sign?osmSigns(t.traffic_sign):[];if(!sg.length&&t.highway==='stop')sg=[{vz:'206',txt:''}];if(!sg.length&&t.highway==='give_way')sg=[{vz:'205',txt:''}];
-        sg.forEach((x,i)=>{S.objs.push({id:uid(),t:'sign',src:'osm',p:[p[0]+i*gap,p[1]],vz:x.vz,txt:x.txt,rot:0});ns++});
-        if(t.highway==='traffic_signals'){S.objs.push({id:uid(),t:'sym',src:'osm',k:'lsa',p,rot:0,len:5});nl++}});
+        const q=offRoad(p,geos);sg.forEach((x,i)=>{S.objs.push({id:uid(),t:'sign',src:'osm',p:[q[0]+i*gap,q[1]],vz:x.vz,txt:x.txt,rot:0});ns++});
+        if(t.highway==='traffic_signals'){S.objs.push({id:uid(),t:'sym',src:'osm',k:'lsa',p:q,rot:0,len:5});nl++}});
       res.push(ns+' Verkehrszeichen, '+nl+' Signalgeber');S.layers.sign=true;S.layers.sym=true}});
   if(opt.mly)await step('Mapillary',async()=>{
     const fs=await mapillary(b,opt.tok),o=S.origin,inb=p=>p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3];let ns=0,nl=0;
     if(opt.repl)S.objs=S.objs.filter(x=>!(x.src==='mly'&&inb(x.p)));
-    fs.forEach(f=>{const u=utm32(f.geometry.coordinates[1],f.geometry.coordinates[0]),p=[Math.round((u[0]-o.e)*100)/100,Math.round((o.n-u[1])*100)/100],v=String(f.object_value||'');if(!inb(p))return;
-      if(/^object--traffic-light/.test(v)){if(!S.objs.some(x=>x.t==='sym'&&x.k==='lsa'&&dist(x.p,p)<4)){S.objs.push({id:uid(),t:'sym',src:'mly',k:'lsa',p,rot:0,len:5});nl++}return}
-      const z=mlyVz(v);if(!z||S.objs.some(x=>x.t==='sign'&&x.vz===z.vz&&dist(x.p,p)<6))return;S.objs.push({id:uid(),t:'sign',src:'mly',p,vz:z.vz,txt:z.txt||'',rot:0});ns++});
+    const cand=[],geos=roadGeos();
+    fs.forEach(f=>{const u=utm32(f.geometry.coordinates[1],f.geometry.coordinates[0]),p=[u[0]-o.e,o.n-u[1]],v=String(f.object_value||'');if(!inb(p))return;
+      if(/^object--traffic-light/.test(v)){cand.push({key:'lsa',p});return}const z=mlyVz(v);if(z)cand.push({key:z.vz+'|'+(z.txt||''),vz:z.vz,txt:z.txt||'',p})});
+    cluster(cand.filter(c=>c.key==='lsa'),12).forEach(c=>{const p=offRoad(c.p,geos);if(S.objs.some(x=>x.t==='sym'&&x.k==='lsa'&&dist(x.p,p)<12))return;S.objs.push({id:uid(),t:'sym',src:'mly',k:'lsa',p,rot:0,len:5});nl++});
+    cluster(cand.filter(c=>c.key!=='lsa'),18).forEach(c=>{const p=offRoad(c.p,geos);if(S.objs.some(x=>x.t==='sign'&&x.vz===c.vz&&dist(x.p,p)<18))return;S.objs.push({id:uid(),t:'sign',src:'mly',p,vz:c.vz,txt:c.txt,rot:0});ns++});
     res.push('aus Mapillary '+ns+' Verkehrszeichen und '+nl+' Signalgeber');S.layers.sign=true;S.layers.sym=true});
   if(opt.plan)S.style='plan';if(opt.hide&&!err.length)S.map.k='none';
+  $('#progT').textContent='Fertig';await new Promise(r=>setTimeout(r,500));$('#prog').style.display='none';
   btn.disabled=false;btn.textContent='Grundlage erzeugen';sel=null;commit();renderTools();renderProps();draw();
   toast(err.length?'Nicht alles hat geklappt. '+err.join('; ')+(res.length?'. Übernommen: '+res.join(', ')+'.':''):'Grundlage erzeugt: '+res.join(', ')+'.');
 }
