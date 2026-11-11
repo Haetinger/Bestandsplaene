@@ -1,0 +1,16 @@
+proxy_ssl_server_name on;
+proxy_http_version 1.1;
+proxy_set_header Connection "";
+proxy_set_header Cookie "";
+proxy_set_header Referer "";
+proxy_connect_timeout 10s;
+proxy_read_timeout 60s;
+proxy_cache tiles;
+proxy_cache_key $uri$is_args$args;
+proxy_cache_valid 200 60d;
+proxy_cache_valid any 1m;
+proxy_cache_lock on;
+proxy_ignore_headers Cache-Control Expires Set-Cookie;
+proxy_hide_header Set-Cookie;
+add_header X-Cache $upstream_cache_status;
+expires 7d;

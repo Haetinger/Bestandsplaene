@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bestandsplan-Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: Zeichenbüro. Werkzeugleiste links, Plan in der Mitte, Eigenschaften rechts. Schrift nach Art der Verkehrsschrift. */
+  --bg:#e9ecf0; --panel:#fbfcfd; --ink:#18212e; --mute:#5b6676; --line:#d3d9e1;
+  --accent:#0a5796; --accent-ink:#ffffff; --hi:#f2b400; --stage:#cfd5dc; --danger:#b3261e;
+  --display:"Barlow Condensed","Bahnschrift","DIN Alternate","Arial Narrow",sans-serif;
+  --body:"Barlow","Bahnschrift","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#11151b; --panel:#1a2029; --ink:#e7ebf1; --mute:#9aa6b7; --line:#2d3643;
+    --accent:#63abea; --accent-ink:#0b1622; --hi:#f2b400; --stage:#0b0e12; --danger:#ff8a80; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#11151b; --panel:#1a2029; --ink:#e7ebf1; --mute:#9aa6b7; --line:#2d3643;
+  --accent:#63abea; --accent-ink:#0b1622; --hi:#f2b400; --stage:#0b0e12; --danger:#ff8a80; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:500 14px/1.35 var(--body);display:grid;grid-template-rows:auto 1fr;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--hi);outline-offset:1px}
+
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--line)}
+.brand{font:700 22px/1 var(--display);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:9px;margin-right:6px}
+.brand i{display:block;width:26px;height:16px;background:
+  linear-gradient(var(--ink),var(--ink)) 0 0/100% 2px no-repeat,
+  linear-gradient(var(--ink),var(--ink)) 0 100%/100% 2px no-repeat,
+  repeating-linear-gradient(90deg,var(--hi) 0 6px,transparent 6px 11px) 0 50%/100% 2px no-repeat}
+.grp{display:flex;gap:4px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:transparent;border-radius:4px;padding:5px 10px;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.pri:hover{filter:brightness(1.1);color:var(--accent-ink)}
+.btn.warn:hover{border-color:var(--danger);color:var(--danger)}
+.btn.sm{padding:2px 7px;font-size:13px}
+.spacer{flex:1}
+#q{width:230px;max-width:60vw;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:5px 9px}
+.attr{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);background:#ffffffd9;color:#18212e;border-radius:4px;padding:3px 9px;font-size:11px;max-width:46%;text-align:center}
+.attr a{color:inherit}
+.attr:empty{display:none}
+.hits{display:flex;flex-direction:column;gap:6px}
+.hits .btn{text-align:left;white-space:normal}
+
+main{display:grid;grid-template-columns:184px minmax(0,1fr) 312px;min-height:0}
+.tools{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:10px 0;display:flex;flex-direction:column;gap:1px}
+.tools h2,.props h3{font:600 12px/1 var(--display);letter-spacing:.1em;text-transform:uppercase;color:var(--mute);margin:0}
+.tools h2{padding:6px 14px 6px}
+.tool{display:flex;justify-content:space-between;align-items:center;gap:6px;border:0;border-left:4px solid transparent;background:transparent;text-align:left;padding:6px 12px 6px 10px}
+.tool kbd{font:500 11px var(--body);color:var(--mute);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+.tool:hover{background:color-mix(in srgb,var(--accent) 9%,transparent)}
+.tool[aria-pressed="true"]{border-left-color:var(--hi);background:color-mix(in srgb,var(--accent) 14%,transparent);font-weight:600}
+.layers{padding:2px 14px;display:flex;flex-direction:column;gap:3px;font-size:13px}
+.layers label{display:flex;gap:6px;align-items:center}
+
+.stage{position:relative;background:var(--stage);min-height:0;min-width:0;overflow:hidden}
+canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.hint{position:absolute;left:12px;top:12px;right:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;pointer-events:none}
+.hint>*{pointer-events:auto}
+.hint .msg{background:#18212eee;color:#fff;border-radius:4px;padding:5px 10px;font-size:13px;max-width:100%}
+.hint .btn{background:#fff;color:#18212e;border-color:#18212e}
+.status{position:absolute;left:12px;bottom:10px;background:#ffffffd9;color:#18212e;border-radius:4px;padding:3px 9px;font-size:12px;font-variant-numeric:tabular-nums;pointer-events:none}
+.zoom{position:absolute;right:12px;bottom:10px;display:flex;gap:4px}
+.zoom .btn{background:#fff;color:#18212e;border-color:#aab3bf;min-width:32px}
+.toast{position:absolute;left:50%;bottom:48px;transform:translateX(-50%);background:#18212e;color:#fff;padding:8px 14px;border-radius:4px;font-size:13px;max-width:80%;display:none}
+
+.props{background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:14px 16px 28px;display:flex;flex-direction:column;gap:9px}
+.props h2{font:700 20px/1.1 var(--display);letter-spacing:.02em;margin:0;text-wrap:balance}
+.props h3{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.props p{margin:0;color:var(--mute);font-size:13px}
+.f{display:grid;grid-template-columns:112px minmax(0,1fr);gap:8px;align-items:center;font-size:13px}
+.f>span:first-child{color:var(--mute)}
+.f input[type=text],.f input[type=number],.f select,.strip select,.strip input{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:3px;padding:3px 6px;font-variant-numeric:tabular-nums}
+.f input[type=range]{width:100%}
+.chk{display:flex;gap:7px;align-items:center;font-size:13px}
+.row{display:flex;gap:6px;flex-wrap:wrap}
+.xs{display:flex;flex-direction:column;gap:3px}
+.strip{display:grid;grid-template-columns:14px minmax(0,1fr) 62px 24px;gap:5px;align-items:center;font-size:13px}
+.strip .sw{width:14px;height:20px;border:1px solid var(--line);border-radius:2px}
+.strip.ln{grid-template-columns:14px minmax(0,1fr);opacity:.95}
+.strip.ln .sw{height:2px;border:0;background:var(--mute);align-self:center}
+.strip.ln select{font-size:12px;padding:1px 4px;color:var(--mute)}
+.strip button{border:0;background:transparent;color:var(--mute);padding:0}
+.strip button:hover{color:var(--danger)}
+
+dialog{border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);padding:18px 20px;max-width:min(880px,92vw);max-height:86vh;overflow:auto}
+dialog::backdrop{background:#0008}
+dialog h2{font:700 22px/1.1 var(--display);margin:0 0 10px}
+dialog .row{margin-top:14px;justify-content:flex-end}
+dialog .f{grid-template-columns:150px 1fr}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;width:100%}
+th,td{text-align:left;padding:4px 10px 4px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+th{font:600 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+
+@media (max-width:860px){
+  body{overflow:auto;display:block}
+  main{display:block}
+  .tools{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:6px 16px;align-items:center}
+  .tools h2,.layers{display:none}
+  .tool{border-left:0;border-bottom:4px solid transparent;white-space:nowrap}
+  .tool kbd{display:none}
+  .tool[aria-pressed="true"]{border-bottom-color:var(--hi)}
+  .stage{height:62vh;min-height:380px}
+  .props{border-left:0;border-top:1px solid var(--line)}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><i></i>Bestandsplan</div>
+  <form class="grp" id="fSearch" role="search">
+    <input type="search" id="q" placeholder="Adresse oder Straße suchen" aria-label="Ort suchen">
+    <button class="btn" type="submit">Suchen</button>
+  </form>
+  <div class="grp">
+    <button class="btn warn" id="bNew" title="Leeren Plan beginnen">Neu</button>
+    <button class="btn" id="bOpen" title="Gespeicherte Projektdatei laden">Projekt öffnen</button>
+    <button class="btn" id="bSave" title="Projektdatei mit Luftbild speichern">Projekt speichern</button>
+  </div>
+  <div class="grp">
+    <button class="btn" id="bBg" title="Luftbild, Kartenausschnitt oder gescannten Plan als Zeichengrundlage laden">Eigenes Bild laden</button>
+    <button class="btn" id="bCal" title="Zwei Punkte mit bekanntem Abstand anklicken">Maßstab kalibrieren</button>
+  </div>
+  <div class="grp">
+    <button class="btn" id="bUndo" title="Rückgängig (Strg+Z)">Rückgängig</button>
+    <button class="btn" id="bRedo" title="Wiederholen (Strg+Y)">Wiederholen</button>
+  </div>
+  <span class="spacer"></span>
+  <div class="grp">
+    <button class="btn" id="bList">Bestandsliste</button>
+    <button class="btn pri" id="bPdf">PDF erzeugen</button>
+  </div>
+  <input type="file" id="inBg" accept="image/*" hidden>
+  <input type="file" id="inProj" accept=".json,application/json" hidden>
+</header>
+<main>
+  <nav class="tools" id="tools" aria-label="Werkzeuge"></nav>
+  <section class="stage" id="stage">
+    <canvas id="cv" tabindex="-1"></canvas>
+    <div class="hint" id="hint"></div>
+    <div class="status" id="status"></div>
+    <div class="attr" id="attr"></div>
+    <div class="zoom">
+      <button class="btn" id="zOut" title="Verkleinern">−</button>
+      <button class="btn" id="zFit" title="Alles zeigen">Alles</button>
+      <button class="btn" id="zIn" title="Vergrößern">+</button>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+  </section>
+  <aside class="props" id="props" aria-label="Eigenschaften"></aside>
+</main>
+<dialog id="dlg"></dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const RED='#c4161c', BLUE='#0a5796', YEL='#f2b400', INK='#14181d';
+const PAPER={A4:[297,210],A3:[420,297],A2:[594,420],A1:[841,594],A0:[1189,841]};
+const TB=30; // Höhe Plankopf in mm
+const YR=new Date().getFullYear(),TS=512,RES=[.1,.2,.5,1,2,5,10,20,50,100,200];
+const MAPS={
+  dop:{n:'Luftbild (DOP20, LGL)',ep:'/wms/dop',layers:'IMAGES_DOP_20_RGB',fmt:'image/jpeg',att:'LGL-BW ('+YR+') Datenlizenz Deutschland - Namensnennung - Version 2.0, www.lgl-bw.de',
+    html:'Luftbild: LGL-BW ('+YR+') <a href="https://www.govdata.de/dl-de/by-2-0" target="_blank" rel="noopener">Datenlizenz Deutschland - Namensnennung - Version 2.0</a>, <a href="https://www.lgl-bw.de" target="_blank" rel="noopener">www.lgl-bw.de</a>'},
+  farbe:{n:'Karte farbig (basemap.de)',ep:'/wms/basemap',layers:'de_basemapde_web_raster_farbe',fmt:'image/png',att:'(c) GeoBasis-DE / BKG ('+YR+') CC BY 4.0',
+    html:'Karte: © GeoBasis-DE / <a href="https://www.bkg.bund.de" target="_blank" rel="noopener">BKG</a> ('+YR+') <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>'},
+  grau:{n:'Karte grau (basemap.de)',ep:'/wms/basemap',layers:'de_basemapde_web_raster_grau',fmt:'image/png',att:'(c) GeoBasis-DE / BKG ('+YR+') CC BY 4.0',
+    html:'Karte: © GeoBasis-DE / <a href="https://www.bkg.bund.de" target="_blank" rel="noopener">BKG</a> ('+YR+') <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>'}
+};
+const HOME={e:513300,n:5403300}; // Stuttgart Mitte, ETRS89 / UTM 32N
+function utm32(lat,lon){ // WGS84/ETRS89 -> UTM Zone 32N (GRS80)
+  const a=6378137,f=1/298.257222101,k0=.9996,e2=f*(2-f),ep=e2/(1-e2),ph=lat*Math.PI/180,la=(lon-9)*Math.PI/180,sn=Math.sin(ph),cs=Math.cos(ph),tn=Math.tan(ph);
+  const N=a/Math.sqrt(1-e2*sn*sn),T=tn*tn,C=ep*cs*cs,A=la*cs,e4=e2*e2,e6=e4*e2;
+  const M=a*((1-e2/4-3*e4/64-5*e6/256)*ph-(3*e2/8+3*e4/32+45*e6/1024)*Math.sin(2*ph)+(15*e4/256+45*e6/1024)*Math.sin(4*ph)-(35*e6/3072)*Math.sin(6*ph));
+  return[500000+k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep)*A**5/120),k0*(M+N*tn*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep)*A**6/720))];
+}
+const KL={bab:{n:'Autobahn',s:.15,b:.30,d:[6,12]},land:{n:'Außerorts',s:.12,b:.25,d:[4,8]},stadt:{n:'Innerorts',s:.12,b:.25,d:[3,6]}};
+const STRIP={fs:['Fahrstreifen','#8b9199','#ffffff'],seit:['Seitenstreifen','#99a0a8','#ffffff'],rand:['Randstreifen','#8b9199','#ffffff'],
+  bus:['Busfahrstreifen','#8b9199','#ffffff'],park:['Parkstreifen','#a8aeb6','#f3f4f5'],rad:['Radweg / Radfahrstreifen','#c98d80','#f6e5e1'],
+  geh:['Gehweg','#d3d1cb','#efeeeb'],mittel:['Mittelstreifen','#b7cea3','#e7f0df'],gruen:['Grünstreifen','#b7cea3','#e7f0df'],bank:['Bankett','#d9cfb8','#f3eee2']};
+const LINE={none:'keine Linie',leit:'Leitlinie (unterbrochen)',fsb:'Fahrstreifenbegrenzung (durchgehend)',rand:'Fahrbahnbegrenzung',
+  breit:'Breitstrich durchgehend',block:'Breitstrich unterbrochen',doppel:'Doppellinie',halt:'Haltlinie',warte:'Wartelinie',furt:'Furtmarkierung',
+  bord:'Bordstein',kante:'Fahrbahnrand unmarkiert'};
+const ROADLINES=['none','leit','fsb','rand','breit','block','doppel','bord','kante'];
+const AREA={asphalt:['Fahrbahnfläche','#8b9199','#ffffff'],sperr:['Sperrfläche','#8b9199','#ffffff'],insel:['Verkehrsinsel','#d3d1cb','#efeeeb'],
+  gruen:['Grünfläche','#b7cea3','#e7f0df'],geh:['Gehwegfläche','#d3d1cb','#efeeeb'],rad:['Radverkehrsfläche','#c98d80','#f6e5e1'],bau:['Gebäude / Bauwerk','#b3aa9d','#e3ded6']};
+const GUARD={sp:'Schutzplanke einseitig',dsp:'Schutzplanke doppelseitig',bsw:'Betonschutzwand',lsw:'Lärmschutzwand',zaun:'Zaun',leitpf:'Leitpfosten'};
+const SYM={pf_g:'Pfeil geradeaus',pf_l:'Pfeil links',pf_r:'Pfeil rechts',pf_gl:'Pfeil geradeaus/links',pf_gr:'Pfeil geradeaus/rechts',
+  lsa:'Signalgeber (LSA)',mast:'Mast / Leuchte',schacht:'Schacht',baum:'Baum',adp:'Anpralldämpfer'};
+const VZ={'101':'Gefahrstelle','103':'Kurve','114':'Schleudergefahr','120':'Verengte Fahrbahn','123':'Arbeitsstelle','131':'Lichtzeichenanlage','133':'Fußgänger','138':'Radverkehr',
+  '205':'Vorfahrt gewähren','206':'Halt. Vorfahrt gewähren','208':'Vorrang des Gegenverkehrs','209':'Vorgeschriebene Fahrtrichtung rechts','215':'Kreisverkehr','220':'Einbahnstraße','222':'Rechts vorbei',
+  '237':'Radweg','240':'Gemeinsamer Geh- und Radweg','241':'Getrennter Rad- und Gehweg','250':'Verbot für Fahrzeuge aller Art','253':'Verbot für Kfz über 3,5 t','260':'Verbot für Kraftfahrzeuge','267':'Verbot der Einfahrt',
+  '274-30':'Zulässige Höchstgeschwindigkeit 30','274-50':'Zulässige Höchstgeschwindigkeit 50','274-60':'Zulässige Höchstgeschwindigkeit 60','274-70':'Zulässige Höchstgeschwindigkeit 70','274-80':'Zulässige Höchstgeschwindigkeit 80','274-100':'Zulässige Höchstgeschwindigkeit 100','274-120':'Zulässige Höchstgeschwindigkeit 120',
+  '276':'Überholverbot','277':'Überholverbot für Kfz über 3,5 t','278':'Ende der zulässigen Höchstgeschwindigkeit','280':'Ende des Überholverbots','282':'Ende sämtlicher Streckenverbote','283':'Absolutes Haltverbot','286':'Eingeschränktes Haltverbot',
+  '301':'Vorfahrt','306':'Vorfahrtstraße','308':'Vorrang vor dem Gegenverkehr','310':'Ortstafel','311':'Ortstafel Rückseite','314':'Parken','325.1':'Verkehrsberuhigter Bereich',
+  '330.1':'Autobahn','330.2':'Ende der Autobahn','331.1':'Kraftfahrstraße','332':'Ausfahrt von der Autobahn','333':'Ausfahrt (Pfeilschild)','350':'Fußgängerüberweg','357':'Sackgasse',
+  '401':'Bundesstraßennummer','405':'Autobahnnummer','406':'Knotenpunktnummer','415':'Wegweiser auf Bundesstraßen','430':'Wegweiser zur Autobahn','438':'Vorwegweiser','440':'Vorwegweiser zur Autobahn',
+  '448':'Ankündigungstafel','449':'Vorwegweiser auf Autobahnen','450':'Ausfahrtbake','453':'Entfernungstafel','454':'Umleitungswegweiser','460':'Bedarfsumleitung',
+  '620':'Leitpfosten','625':'Richtungstafel in Kurven','626':'Leitplatte'};
+const PRESET={
+  bab22:{n:'Autobahn 2×2 mit Seitenstreifen',kl:'bab',s:[['bank',1.5],['seit',3],['fs',3.75],['fs',3.75],['rand',.75],['mittel',4],['rand',.75],['fs',3.75],['fs',3.75],['seit',3],['bank',1.5]],
+    l:['none','kante','rand','leit','rand','none','none','rand','leit','rand','kante','none']},
+  bab33:{n:'Autobahn 2×3 mit Seitenstreifen',kl:'bab',s:[['bank',1.5],['seit',3],['fs',3.75],['fs',3.5],['fs',3.5],['rand',.75],['mittel',4],['rand',.75],['fs',3.5],['fs',3.5],['fs',3.75],['seit',3],['bank',1.5]],
+    l:['none','kante','rand','leit','leit','rand','none','none','rand','leit','leit','rand','kante','none']},
+  rampe:{n:'Rampe einstreifig',kl:'bab',s:[['bank',1.5],['fs',6],['bank',1.5]],l:['none','rand','rand','none']},
+  land2:{n:'Landstraße zweistreifig',kl:'land',s:[['bank',1.5],['rand',.5],['fs',3.5],['fs',3.5],['rand',.5],['bank',1.5]],l:['none','kante','rand','leit','rand','kante','none']},
+  land21:{n:'Landstraße 2+1',kl:'land',s:[['bank',1.5],['rand',.5],['fs',3.5],['fs',3.25],['fs',3.5],['rand',.5],['bank',1.5]],l:['none','kante','rand','leit','doppel','rand','kante','none']},
+  stadt2:{n:'Stadtstraße mit Gehwegen',kl:'stadt',s:[['geh',2.5],['fs',3.25],['fs',3.25],['geh',2.5]],l:['none','bord','leit','bord','none']},
+  stadtrad:{n:'Stadtstraße mit Radfahrstreifen und Parken',kl:'stadt',s:[['geh',2.5],['park',2],['rad',1.85],['fs',3.25],['fs',3.25],['rad',1.85],['geh',2.5]],l:['none','bord','fsb','breit','leit','breit','bord','none']},
+  weg:{n:'Geh- und Radweg',kl:'stadt',s:[['rad',3]],l:['kante','kante']}
+};
+const TOOLS=[['sel','Auswählen','V'],['road','Straße','S'],['line','Markierung','M'],['area','Fläche','F'],['guard','Schutzeinrichtung','G'],
+  ['sign','Verkehrszeichen','Z'],['sym','Symbol','Y'],['text','Text','T'],['dim','Maß','B'],['sheet','Blatt','P']];
+const LAYERS=[['bg','Karte / Luftbild'],['road','Straßen'],['area','Flächen'],['line','Markierung'],['guard','Schutzeinrichtungen'],['sign','Verkehrszeichen'],
+  ['sym','Symbole'],['stat','Stationierung'],['dim','Maße'],['text','Texte'],['sheet','Blattrahmen']];
+const POLY={road:2,line:2,area:3,guard:2,dim:2,calib:2};
+const TNAME={road:'Straße',line:'Markierung',area:'Fläche',guard:'Schutzeinrichtung',sign:'Verkehrszeichen',sym:'Symbol',text:'Text',dim:'Maß',sheet:'Blatt'};
+
+/* ---------- Zustand ---------- */
+let S, BGDATA=null, BGIMG=null, sel=null, selV=-1, tool='sel', draft=null, cur=[0,0], snapPt=null;
+let hist=[], hi=-1, nextId=1;
+const LAST={road:'land2',line:'fsb',area:'asphalt',guard:'sp',sign:'274-60',sym:'pf_g'};
+const V={z:1,x:0,y:0};
+function blank(){
+  return {v:1,meta:{projekt:'',inhalt:'Bestandsplan',ag:'',verfasser:'HX mobility GmbH',bearb:'',plannr:'',datum:new Date().toLocaleDateString('de-DE')},
+    sheet:{paper:'A3',orient:'quer',scale:500,north:0,legend:true,bgPrint:true},style:'farbe',surfAlpha:1,bg:null,origin:{e:HOME.e,n:HOME.n},map:{k:'dop',alpha:1},objs:[],
+    layers:Object.fromEntries(LAYERS.map(l=>[l[0],true]))};
+}
+const uid=()=>nextId++;
+const selObj=()=>S.objs.find(o=>o.id===sel);
+function commit(){hist=hist.slice(0,hi+1);hist.push(JSON.stringify(S));if(hist.length>80)hist.shift();hi=hist.length-1;persist()}
+function persist(){try{localStorage.setItem('bps.state',JSON.stringify(S))}catch(e){}}
+function persistBg(){try{BGDATA?localStorage.setItem('bps.bg',BGDATA):localStorage.removeItem('bps.bg')}catch(e){try{localStorage.removeItem('bps.bg')}catch(_){}}}
+function undo(d){const n=hi+d;if(n<0||n>=hist.length)return;hi=n;S=JSON.parse(hist[hi]);if(!selObj()){sel=null;selV=-1}persist();renderProps();draw()}
+function loadState(o){S=Object.assign(blank(),o);if(!o.origin){S.origin={e:HOME.e,n:HOME.n};S.map={k:'none',alpha:1}}if(!S.map||(S.map.k!=='none'&&!MAPS[S.map.k]))S.map={k:'none',alpha:1};S.layers=Object.assign(blank().layers,o.layers||{});nextId=1+Math.max(0,...S.objs.map(x=>x.id||0));sel=null;selV=-1}
+
+/* ---------- Geometrie ---------- */
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+function catmull(P){
+  const n=P.length;if(n<3)return P.slice();const out=[];
+  for(let i=0;i<n-1;i++){const p0=P[Math.max(i-1,0)],p1=P[i],p2=P[i+1],p3=P[Math.min(i+2,n-1)];
+    const k=Math.max(2,Math.min(60,Math.ceil(dist(p1,p2)/4)));
+    for(let j=0;j<k;j++){const t=j/k,t2=t*t,t3=t2*t,q=[0,0];
+      for(let c=0;c<2;c++)q[c]=.5*(2*p1[c]+(-p0[c]+p2[c])*t+(2*p0[c]-5*p1[c]+4*p2[c]-p3[c])*t2+(-p0[c]+3*p1[c]-3*p2[c]+p3[c])*t3);
+      out.push(q)}}
+  out.push(P[n-1]);return out;
+}
+const dense=o=>o.smooth&&o.pts.length>2?catmull(o.pts):o.pts;
+function rnorm(a,b){const dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1;return[-dy/l,dx/l]} // rechte Normale (y nach unten)
+function offs(D,o){
+  if(!o||D.length<2)return D;const n=D.length,out=[];
+  for(let i=0;i<n;i++){const n1=rnorm(D[Math.max(i-1,0)],D[Math.max(i,1)]),n2=rnorm(D[Math.min(i,n-2)],D[Math.min(i+1,n-1)]);
+    let mx=n1[0]+n2[0],my=n1[1]+n2[1];const l=Math.hypot(mx,my)||1;mx/=l;my/=l;const cs=Math.max(.35,mx*n1[0]+my*n1[1]);
+    out.push([D[i][0]+mx*o/cs,D[i][1]+my*o/cs])}
+  return out;
+}
+function cum(D){const c=[0];for(let i=1;i<D.length;i++)c.push(c[i-1]+dist(D[i-1],D[i]));return c}
+function at(D,c,s){ // Punkt, Winkel bei Länge s
+  const L=c[c.length-1];s=Math.max(0,Math.min(L,s));let i=1;while(i<c.length-1&&c[i]<s)i++;
+  const a=D[i-1],b=D[i],sl=c[i]-c[i-1]||1,t=(s-c[i-1])/sl;return{p:[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t],a:Math.atan2(b[1]-a[1],b[0]-a[0])};
+}
+function proj(D,p){ // nächster Punkt auf Linienzug: Abstand, Station, Seite (+ rechts)
+  let best={d:1e18,s:0,side:1},run=0;
+  for(let i=1;i<D.length;i++){const a=D[i-1],b=D[i],dx=b[0]-a[0],dy=b[1]-a[1],l2=dx*dx+dy*dy||1e-9,l=Math.sqrt(l2);
+    const t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l2)),q=[a[0]+dx*t,a[1]+dy*t],d=dist(p,q);
+    if(d<best.d)best={d,s:run+l*t,side:(dx*(p[1]-a[1])-dy*(p[0]-a[0]))>=0?1:-1,i};run+=l}
+  return best;
+}
+function rg(r){const D=dense(r),b=[0];r.strips.forEach(s=>b.push(b[b.length-1]+(+s.w||0)));const W=b[b.length-1];
+  const ax=(r.axis==null||r.axis==='m')?W/2:b[Math.min(r.axis,b.length-1)];const c=cum(D);return{D,c,len:c[c.length-1],off:b.map(v=>v-ax),W}}
+function along(D,step,start){const c=cum(D),L=c[c.length-1],out=[];if(step<=0)return out;for(let s=start??step/2;s<=L+1e-6;s+=step){const q=at(D,c,s);q.s=s;out.push(q)}return out}
+function inPoly(p,P){let c=false;for(let i=0,j=P.length-1;i<P.length;j=i++){const a=P[i],b=P[j];if((a[1]>p[1])!==(b[1]>p[1])&&p[0]<(b[0]-a[0])*(p[1]-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+function hatch(P,sp,ang){const c=Math.cos(ang),s=Math.sin(ang),R=P.map(p=>[p[0]*c+p[1]*s,-p[0]*s+p[1]*c]);
+  let y0=Math.min(...R.map(p=>p[1])),y1=Math.max(...R.map(p=>p[1])),segs=[];
+  for(let y=y0+sp/2;y<y1&&segs.length<600;y+=sp){const xs=[];
+    for(let i=0,j=R.length-1;i<R.length;j=i++){const a=R[i],b=R[j];if((a[1]>y)!==(b[1]>y))xs.push(a[0]+(y-a[1])*(b[0]-a[0])/(b[1]-a[1]))}
+    xs.sort((a,b)=>a-b);for(let k=0;k+1<xs.length;k+=2)segs.push([[xs[k]*c-y*s,xs[k]*s+y*c],[xs[k+1]*c-y*s,xs[k+1]*s+y*c]])}
+  return segs}
+function fmtSt(v,f){v=Math.round(v);if(f==='plus'){const k=Math.floor(v/1000);return k+'+'+String(v-k*1000).padStart(3,'0')}return 'km '+(v/1000).toFixed(3).replace('.',',')}
+function paperDims(){const p=PAPER[S.sheet.paper]||PAPER.A3;return S.sheet.orient==='hoch'?[p[1],p[0]]:p}
+function frame(){const[PW,PH]=paperDims();return{PW,PH,ax:20,ay:10,aw:PW-30,ah:PH-20-TB}}
+function sheetCorners(sh){const f=frame(),k=S.sheet.scale/1000,hw=f.aw*k/2,hh=f.ah*k/2,c=Math.cos(sh.rot||0),s=Math.sin(sh.rot||0);
+  return[[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([u,v])=>[sh.p[0]+u*c-v*s,sh.p[1]+u*s+v*c])}
+function bbox(){let b=[1e18,1e18,-1e18,-1e18];const add=p=>{b[0]=Math.min(b[0],p[0]);b[1]=Math.min(b[1],p[1]);b[2]=Math.max(b[2],p[0]);b[3]=Math.max(b[3],p[1])};
+  S.objs.forEach(o=>{if(o.t==='sheet')sheetCorners(o).forEach(add);else if(o.pts)o.pts.forEach(add);else if(o.p)add(o.p)});
+  if(S.bg){add([S.bg.x,S.bg.y]);add([S.bg.x+S.bg.w*S.bg.mpp,S.bg.y+S.bg.h*S.bg.mpp])}
+  return b[0]>b[2]?null:b}
+
+/* ---------- Zeichnen (gemeinsam für Bildschirm und PDF) ---------- */
+function upright(G,a){return Math.cos(a-G.rot)<0?a+Math.PI:a}
+function gtext(G,str,x,y,o){
+  if(!str||!G.vis(o.size))return;const size=o.size,a=o.angle??G.rot,w=G.tw(str,size,o.bold),c=Math.cos(a),s=Math.sin(a);
+  if(o.align==='l'){x+=c*w/2;y+=s*w/2}
+  if(o.box){const hw=w/2+size*.4,hh=size*.7;G.path([[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]].map(([u,v])=>[x+u*c-v*s,y+u*s+v*c]),1,{fill:'#ffffff',stroke:o.boxEdge,w:G.mm(.15),alpha:o.boxEdge?1:.86})}
+  G.txt(str,x,y,size,a,o.color||INK,o.bold);
+}
+function drawMark(G,pts,code,kl){
+  const K=KL[kl]||KL.land,c=S.style==='linie'?'#111111':'#ffffff',st=(w,dash)=>({stroke:c,w:Math.max(w,G.mm(.18)),dash});
+  switch(code){
+    case'leit':G.path(pts,0,st(K.s,K.d));break;
+    case'fsb':G.path(pts,0,st(K.s));break;
+    case'rand':G.path(pts,0,st(kl==='bab'?K.b:K.s));break;
+    case'breit':G.path(pts,0,st(K.b));break;
+    case'block':G.path(pts,0,st(K.b,[K.d[0],K.d[0]]));break;
+    case'doppel':{const o=Math.max(K.s,G.mm(.22));G.path(offs(pts,-o),0,st(K.s));G.path(offs(pts,o),0,st(K.s));break}
+    case'halt':G.path(pts,0,st(.5));break;
+    case'warte':G.path(pts,0,st(.5,[.5,.25]));break;
+    case'furt':G.path(pts,0,st(K.s,[.5,.2]));break;
+    case'bord':G.path(pts,0,{stroke:'#3d4249',w:Math.max(.15,G.mm(.3))});break;
+    case'kante':G.path(pts,0,{stroke:'#3d4249',w:G.mm(.18)});break;
+  }
+}
+function drawGuard(G,o){
+  const D=dense(o),k=o.k;if(D.length<2)return;
+  if(k==='bsw'){const h=Math.max(.3,G.mm(.45));G.path(offs(D,-h).concat(offs(D,h).reverse()),1,{fill:'#6a6f77',stroke:INK,w:G.mm(.15)});return}
+  if(k==='leitpf'){along(D,Math.max(5,o.int||50),0).forEach(q=>G.circle(q.p[0],q.p[1],G.mm(.6),{fill:'#ffffff',stroke:INK,w:G.mm(.2)}));return}
+  G.path(D,0,{stroke:INK,w:G.mm(k==='lsw'?.7:.3)});
+  const step=k==='sp'||k==='dsp'?Math.max(4,G.mm(2.5)):G.mm(5),tl=G.mm(1.3),sd=o.side||1;
+  along(D,step).forEach(q=>{const nx=-Math.sin(q.a),ny=Math.cos(q.a),tx=Math.cos(q.a),ty=Math.sin(q.a),[x,y]=q.p,st={stroke:INK,w:G.mm(.25)};
+    if(k==='sp')G.path([[x,y],[x+nx*tl*sd,y+ny*tl*sd]],0,st);
+    else if(k==='dsp')G.path([[x-nx*tl,y-ny*tl],[x+nx*tl,y+ny*tl]],0,st);
+    else if(k==='lsw'){const h=tl*.55;G.path([[x-tx*h-nx*h,y-ty*h-ny*h],[x+tx*h-nx*h,y+ty*h-ny*h],[x+tx*h+nx*h,y+ty*h+ny*h],[x-tx*h+nx*h,y-ty*h+ny*h]],1,{fill:INK})}
+    else{const h=tl*.6;G.path([[x-tx*h-nx*h,y-ty*h-ny*h],[x+tx*h+nx*h,y+ty*h+ny*h]],0,st);G.path([[x-tx*h+nx*h,y-ty*h+ny*h],[x+tx*h-nx*h,y+ty*h-ny*h]],0,st)}});
+}
+function signSpec(vz){
+  const n=parseFloat(vz)||0,sub=(String(vz).split('-')[1]||'');
+  if(n===205)return{sh:'trid',fill:'#ffffff',edge:RED};
+  if(n===206)return{sh:'oct',fill:RED,edge:'#ffffff',txt:'STOP',tc:'#ffffff'};
+  if(n>=101&&n<200||n===301)return{sh:'tri',fill:'#ffffff',edge:RED};
+  if(n>=209&&n<=222||n>=237&&n<=245)return{sh:'circ',fill:BLUE,edge:'#ffffff'};
+  if(n===267)return{sh:'circ',fill:RED,edge:'#ffffff',bar:1};
+  if(n>=278&&n<=282)return{sh:'circ',fill:'#ffffff',edge:'#333333',slash:1};
+  if(n===283||n===286)return{sh:'circ',fill:BLUE,edge:RED,slash:1,sc:RED};
+  if(n>=208&&n<=290)return{sh:'circ',fill:'#ffffff',edge:RED,txt:n===274?sub:''};
+  if(n===306||n===307)return{sh:'dia',fill:YEL,edge:'#ffffff',slash:n===307};
+  if(n===310||n===311)return{sh:'rect',fill:YEL,edge:'#111111'};
+  if(n===314)return{sh:'sq',fill:BLUE,edge:'#ffffff',txt:'P',tc:'#ffffff'};
+  if(n>=315&&n<400||n>=430&&n<=453||n===405)return{sh:n>=430?'rect':'sq',fill:BLUE,edge:'#ffffff'};
+  if(n>=400&&n<500)return{sh:'rect',fill:YEL,edge:'#111111'};
+  if(n>=600&&n<700)return{sh:'rect',fill:'#ffffff',edge:RED};
+  return{sh:'rect',fill:'#ffffff',edge:'#111111'};
+}
+function drawSign(G,o){
+  const s=G.mm(3.2),[x,y]=o.p,sp=signSpec(o.vz),r=(o.rot||0)*Math.PI/180,c=Math.cos(r),sn=Math.sin(r);
+  const P=a=>a.map(([u,v])=>[x+(u*c-v*sn)*s,y+(u*sn+v*c)*s]),st={fill:sp.fill,stroke:sp.edge,w:G.mm(sp.edge===RED?.75:.3)};
+  const out={stroke:'#22272e',w:G.mm(.12)};
+  const SH={tri:[[0,-1.15],[1.2,.85],[-1.2,.85]],trid:[[0,1.15],[1.2,-.85],[-1.2,-.85]],dia:[[0,-1.2],[1.2,0],[0,1.2],[-1.2,0]],
+    rect:[[-1.5,-.9],[1.5,-.9],[1.5,.9],[-1.5,.9]],sq:[[-1,-1],[1,-1],[1,1],[-1,1]],
+    oct:[...Array(8)].map((_,i)=>[Math.cos((i+.5)*Math.PI/4)*1.1,Math.sin((i+.5)*Math.PI/4)*1.1])};
+  if(sp.sh==='circ'){G.circle(x,y,s,st);G.circle(x,y,s+G.mm(.4),out)}
+  else{G.path(P(SH[sp.sh]),1,st);G.path(P(SH[sp.sh].map(([u,v])=>[u*1.13,v*1.13])),1,out)}
+  if(sp.slash)G.path(P([[-.68,.68],[.68,-.68]]),0,{stroke:sp.sc||'#333333',w:G.mm(.5)});
+  if(sp.bar)G.path(P([[-.6,0],[.6,0]]),0,{stroke:'#ffffff',w:G.mm(.9)});
+  if(sp.txt)G.txt(sp.txt,x,y,G.mm(sp.txt.length>2?1.9:2.6),G.rot,sp.tc||'#111111',1);
+  const d=s*1.35+G.mm(2.1);gtext(G,'Z '+o.vz+(o.txt?' · '+o.txt:''),x-Math.sin(G.rot)*d,y+Math.cos(G.rot)*d,{size:G.mm(2.1),box:1});
+}
+function drawSym(G,o){
+  const[x,y]=o.p,r=(o.rot||0)*Math.PI/180,c=Math.cos(r),sn=Math.sin(r),k=o.k,mc=S.style==='linie'?'#111111':'#ffffff';
+  if(k.startsWith('pf_')){const L=o.len||5,P=a=>a.map(([u,v])=>[x+(u*c-v*sn)*L,y+(u*sn+v*c)*L]);
+    const str=[[-.03,.5],[-.03,-.15],[-.13,-.15],[0,-.5],[.13,-.15],[.03,-.15],[.03,.5]],sh=[[-.03,.5],[-.03,-.12],[.03,-.12],[.03,.5]],
+      hl=[[-.03,-.3],[-.36,-.1],[-.03,.1]],mir=a=>a.map(([u,v])=>[-u,v]);
+    const parts={pf_g:[str],pf_l:[sh,hl],pf_r:[sh,mir(hl)],pf_gl:[str,hl],pf_gr:[str,mir(hl)]}[k]||[str];
+    parts.forEach(q=>G.path(P(q),1,{fill:mc,stroke:S.style==='linie'?null:'#ffffff',w:G.mm(.05)}));return}
+  const s=G.mm(2.2),P=a=>a.map(([u,v])=>[x+(u*c-v*sn)*s,y+(u*sn+v*c)*s]),st={fill:'#ffffff',stroke:INK,w:G.mm(.25)};
+  if(k==='lsa'){G.path(P([[-.55,-1.4],[.55,-1.4],[.55,1.4],[-.55,1.4]]),1,{fill:INK});[['#e53935',-.85],['#f2b400',0],['#43a047',.85]].forEach(([col,v])=>{const q=P([[0,v]])[0];G.circle(q[0],q[1],s*.3,{fill:col})})}
+  else if(k==='mast'){G.circle(x,y,s*.8,st);G.path(P([[-.8,0],[.8,0]]),0,st);G.path(P([[0,-.8],[0,.8]]),0,st)}
+  else if(k==='schacht'){G.circle(x,y,s*.8,st);G.circle(x,y,s*.25,{fill:INK})}
+  else if(k==='baum'){G.circle(x,y,Math.max(s,o.len||2.5),{fill:'#8fb873',stroke:'#4f7a36',w:G.mm(.25),alpha:.85});G.circle(x,y,G.mm(.4),{fill:'#4f7a36'})}
+  else if(k==='adp'){G.path(P([[0,-1.8],[.8,1.2],[-.8,1.2]]),1,{fill:YEL,stroke:INK,w:G.mm(.25)})}
+}
+function scene(G){
+  const L=S.layers,ci=S.style==='linie'?2:1,by=t=>S.objs.filter(o=>o.t===t),roads=by('road'),geo=new Map(roads.map(r=>[r.id,rg(r)]));
+  if(L.road){
+    roads.forEach(r=>{const g=geo.get(r.id);r.strips.forEach((s,i)=>{const col=(STRIP[s.k]||STRIP.fs)[ci];
+      G.path(offs(g.D,g.off[i]).concat(offs(g.D,g.off[i+1]).reverse()),1,{fill:col,stroke:S.surfAlpha>=1?col:null,w:G.mm(.06),alpha:S.surfAlpha})})});
+    roads.forEach(r=>{const g=geo.get(r.id);r.lines.forEach((c,i)=>{if(c&&c!=='none')drawMark(G,offs(g.D,g.off[i]),c,r.kl)})});
+  }
+  if(L.area)by('area').forEach(o=>{if(o.pts.length<3)return;const A=AREA[o.k]||AREA.asphalt,mc=S.style==='linie'?'#111111':'#ffffff';
+    G.path(o.pts,1,{fill:A[ci],alpha:S.surfAlpha});
+    if(o.k==='sperr'){hatch(o.pts,Math.max(1.5,G.mm(1.2)),Math.PI/4).forEach(sg=>G.path(sg,0,{stroke:mc,w:Math.max(.25,G.mm(.2))}));G.path(o.pts,1,{stroke:mc,w:Math.max(.12,G.mm(.2))})}
+    else if(o.k==='insel')G.path(o.pts,1,{stroke:'#3d4249',w:Math.max(.15,G.mm(.3))});
+    else if(o.k==='bau')G.path(o.pts,1,{stroke:'#3d4249',w:G.mm(.25)})});
+  if(L.line)by('line').forEach(o=>drawMark(G,dense(o),o.k,o.kl||'land'));
+  if(L.guard)by('guard').forEach(o=>drawGuard(G,o));
+  if(L.stat)roads.forEach(r=>{const g=geo.get(r.id);if(g.D.length<2)return;const last=g.off.length-1;
+    if(r.stShow){const int=Math.max(5,+r.stInt||100),dir=r.stDir===-1?-1:1,st0=+r.st0||0,m=((st0%int)+int)%int,s0=dir===1?(int-m)%int:m;
+      for(let s=s0;s<=g.len+1e-6;s+=int){const q=at(g.D,g.c,s),nx=-Math.sin(q.a),ny=Math.cos(q.a),[x,y]=q.p,a=[x+nx*(g.off[0]-G.mm(1.5)),y+ny*(g.off[0]-G.mm(1.5))];
+        G.path([a,[x+nx*g.off[last],y+ny*g.off[last]]],0,{stroke:'#b0155a',w:G.mm(.2)});
+        gtext(G,fmtSt(st0+dir*s,r.stFmt),a[0]-nx*G.mm(2.2),a[1]-ny*G.mm(2.2),{size:G.mm(2.2),angle:upright(G,q.a),color:'#b0155a',box:1})}}
+    if(r.name){const q=at(g.D,g.c,Math.min(g.len/2,Math.max(G.mm(30),g.len*.12))),nx=-Math.sin(q.a),ny=Math.cos(q.a),d=g.off[last]+G.mm(3.5);
+      gtext(G,r.name,q.p[0]+nx*d,q.p[1]+ny*d,{size:G.mm(3.2),angle:upright(G,q.a),bold:1,box:1})}});
+  if(L.sym)by('sym').forEach(o=>drawSym(G,o));
+  if(L.sign)by('sign').forEach(o=>drawSign(G,o));
+  if(L.dim)by('dim').forEach(o=>{const[a,b]=o.pts,an=Math.atan2(b[1]-a[1],b[0]-a[0]),nx=-Math.sin(an),ny=Math.cos(an),t=G.mm(1.4),st={stroke:'#1c4f8f',w:G.mm(.2)};
+    G.path([a,b],0,st);[a,b].forEach(p=>G.path([[p[0]-nx*t,p[1]-ny*t],[p[0]+nx*t,p[1]+ny*t]],0,st));
+    const u=upright(G,an),ux=-Math.sin(u),uy=Math.cos(u);
+    gtext(G,dist(a,b).toFixed(2).replace('.',',')+' m',(a[0]+b[0])/2-ux*G.mm(2.3),(a[1]+b[1])/2-uy*G.mm(2.3),{size:G.mm(2.3),angle:u,color:'#1c4f8f',box:1})});
+  if(L.text)by('text').forEach(o=>gtext(G,o.s,o.p[0],o.p[1],{size:G.mm(o.size||3),angle:(o.rot||0)*Math.PI/180,box:o.box,bold:o.bold}));
+}
+
+/* ---------- Kartenkacheln (WMS über den eigenen Server) ---------- */
+const tiles=new Map();let mapErr=0;
+function getTile(k,r,ix,iy,want){
+  const key=k+'/'+r+'/'+ix+'/'+iy,m=MAPS[k];let t=tiles.get(key);
+  if(!t&&want){const sp=TS*r,x0=ix*sp,y0=iy*sp;t={img:new Image(),ok:false,bad:false};
+    t.p=new Promise(res=>{t.img.onload=()=>{t.ok=true;mapErr=0;draw();res(t)};
+      t.img.onerror=()=>{t.bad=true;if(++mapErr===6)toast('Der Kartendienst antwortet nicht. Prüfe, ob der Server die Dienste erreicht.');res(t)}});
+    t.img.src=m.ep+'?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&LAYERS='+m.layers+'&STYLES=&CRS=EPSG:25832&BBOX='+[x0,y0,x0+sp,y0+sp].map(v=>v.toFixed(2)).join(',')+'&WIDTH='+TS+'&HEIGHT='+TS+'&FORMAT='+m.fmt;
+    tiles.set(key,t);if(tiles.size>520){const it=tiles.keys();for(let i=0;i<120;i++)tiles.delete(it.next().value)}}
+  return t;
+}
+function tileRange(r,b){const sp=TS*r,o=S.origin;return{sp,ix0:Math.floor((o.e+b[0])/sp),ix1:Math.floor((o.e+b[2])/sp),iy0:Math.floor((o.n-b[3])/sp),iy1:Math.floor((o.n-b[1])/sp)}}
+function drawTiles(c,k,r,b,want){const R=tileRange(r,b),o=S.origin;let miss=0;
+  for(let ix=R.ix0;ix<=R.ix1;ix++)for(let iy=R.iy0;iy<=R.iy1;iy++){const t=getTile(k,r,ix,iy,want);if(t&&t.ok)c.drawImage(t.img,ix*R.sp-o.e,o.n-(iy+1)*R.sp,R.sp*1.002,R.sp*1.002);else miss++}
+  return miss}
+const mapOn=()=>S.layers.bg&&S.map&&MAPS[S.map.k];
+let attrKey='';
+function saveView(){try{const c=s2w([CW/2,CH/2]);localStorage.setItem('bps.view',JSON.stringify([V.z,c[0],c[1]]))}catch(e){}}
+let svT=0;
+
+/* ---------- Bildschirm ---------- */
+const cv=$('#cv'),ctx=cv.getContext('2d');let dpr=1,CW=0,CH=0,raf=0;
+const w2s=p=>[p[0]*V.z+V.x,p[1]*V.z+V.y],s2w=p=>[(p[0]-V.x)/V.z,(p[1]-V.y)/V.z];
+function resize(){const r=cv.getBoundingClientRect();dpr=window.devicePixelRatio||1;CW=r.width;CH=r.height;cv.width=Math.round(CW*dpr);cv.height=Math.round(CH*dpr);draw()}
+function draw(){if(!raf)raf=requestAnimationFrame(()=>{raf=0;render()})}
+const FONT='Barlow, Bahnschrift, "Segoe UI", sans-serif';
+function canvasG(){
+  const world=()=>ctx.setTransform(dpr*V.z,0,0,dpr*V.z,dpr*V.x,dpr*V.y);
+  const paint=st=>{ctx.globalAlpha=st.alpha??1;if(st.fill){ctx.fillStyle=st.fill;ctx.fill()}
+    if(st.stroke){ctx.strokeStyle=st.stroke;ctx.lineWidth=Math.max(st.w||0,.8/V.z);ctx.setLineDash(st.dash||[]);ctx.lineJoin='round';ctx.lineCap='butt';ctx.stroke()}ctx.globalAlpha=1};
+  return{pdf:false,rot:0,mm:x=>x*S.sheet.scale/1000,vis:size=>size*V.z>=4.5,
+    path(pts,closed,st){if(pts.length<2)return;world();ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);if(closed)ctx.closePath();paint(st)},
+    circle(x,y,r,st){world();ctx.beginPath();ctx.arc(x,y,r,0,7);paint(st)},
+    tw(str,size,bold){ctx.font=(bold?600:500)+' 100px '+FONT;return ctx.measureText(str).width/100*size},
+    txt(str,x,y,size,a,color,bold){const px=size*V.z;if(px<4.5)return;const p=w2s([x,y]);ctx.setTransform(dpr,0,0,dpr,0,0);ctx.translate(p[0],p[1]);ctx.rotate(a);
+      ctx.font=(bold?600:500)+' '+px+'px '+FONT;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(str,0,px*.04)}};
+}
+function render(){
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle='#f6f6f2';ctx.fillRect(0,0,CW,CH);
+  // Raster
+  const tgt=70/V.z,steps=[1,2,5,10,20,50,100,200,500,1000,2000,5000],gs=steps.find(s=>s>=tgt)||5000,a=s2w([0,0]),b=s2w([CW,CH]);
+  const mp=mapOn();clearTimeout(svT);svT=setTimeout(saveView,600);
+  const ak=mp?S.map.k:'';if(ak!==attrKey){attrKey=ak;$('#attr').innerHTML=mp?mp.html:''}
+  if(mp){const want=1/(V.z*dpr);if(want<=260){let li=RES.findIndex(r=>r>=want*.7);if(li<0)li=RES.length-1;const vb=[a[0],a[1],b[0],b[1]];
+    ctx.setTransform(dpr*V.z,0,0,dpr*V.z,dpr*V.x,dpr*V.y);ctx.globalAlpha=S.map.alpha??1;
+    if(drawTiles(ctx,S.map.k,RES[li],vb,true)){for(let j=Math.min(RES.length-1,li+2);j>li;j--)drawTiles(ctx,S.map.k,RES[j],vb,false);drawTiles(ctx,S.map.k,RES[li],vb,false)}
+    ctx.globalAlpha=1;ctx.setTransform(dpr,0,0,dpr,0,0)}}
+  ctx.strokeStyle='#e3e3dc';ctx.lineWidth=1;ctx.beginPath();if(!mp){
+  for(let x=Math.ceil(a[0]/gs)*gs;x<b[0];x+=gs){const X=Math.round(x*V.z+V.x)+.5;ctx.moveTo(X,0);ctx.lineTo(X,CH)}
+  for(let y=Math.ceil(a[1]/gs)*gs;y<b[1];y+=gs){const Y=Math.round(y*V.z+V.y)+.5;ctx.moveTo(0,Y);ctx.lineTo(CW,Y)}}ctx.stroke();
+  if(S.bg&&BGIMG&&S.layers.bg){ctx.setTransform(dpr*V.z,0,0,dpr*V.z,dpr*V.x,dpr*V.y);ctx.globalAlpha=S.bg.alpha??1;ctx.drawImage(BGIMG,S.bg.x,S.bg.y,S.bg.w*S.bg.mpp,S.bg.h*S.bg.mpp);ctx.globalAlpha=1}
+  scene(canvasG());
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  const css=getComputedStyle(document.documentElement),ACC='#0a5796';
+  const poly=(pts,close)=>{ctx.beginPath();pts.forEach((p,i)=>{const q=w2s(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});if(close)ctx.closePath()};
+  // Blattrahmen
+  if(S.layers.sheet){const sh=S.objs.filter(o=>o.t==='sheet');sh.forEach((o,i)=>{const c=sheetCorners(o),on=o.id===sel;poly(c,1);ctx.setLineDash(on?[]:[9,5]);ctx.strokeStyle=on?'#e07b00':'#3a4656';ctx.lineWidth=on?2.5:1.5;ctx.stroke();ctx.setLineDash([]);
+    const q=w2s(c[0]);ctx.save();ctx.translate(q[0],q[1]);ctx.rotate(o.rot||0);ctx.font='600 12px '+FONT;const t='Blatt '+(i+1)+' · '+S.sheet.paper+' · 1:'+S.sheet.scale,w=ctx.measureText(t).width+12;
+    ctx.fillStyle=on?'#e07b00':'#3a4656';ctx.fillRect(0,-18,w,18);ctx.fillStyle='#fff';ctx.textBaseline='middle';ctx.textAlign='left';ctx.fillText(t,6,-8.5);ctx.restore()})}
+  // Auswahl
+  const o=selObj();
+  if(o){ctx.strokeStyle='#e07b00';ctx.fillStyle='#fff';ctx.lineWidth=1.5;
+    if(o.pts){poly(o.pts,o.t==='area');ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([]);
+      o.pts.forEach((p,i)=>{const q=w2s(p);ctx.beginPath();ctx.rect(q[0]-4.5,q[1]-4.5,9,9);ctx.fillStyle=i===selV?'#e07b00':'#fff';ctx.fill();ctx.stroke()});
+      if(o.t==='road'&&o.pts.length>1){const q=w2s(o.pts[0]),q2=w2s(o.pts[1]),an=Math.atan2(q2[1]-q[1],q2[0]-q[0]);ctx.save();ctx.translate(q[0],q[1]);ctx.rotate(an);ctx.beginPath();ctx.moveTo(14,0);ctx.lineTo(30,0);ctx.moveTo(24,-5);ctx.lineTo(30,0);ctx.lineTo(24,5);ctx.lineWidth=2;ctx.stroke();ctx.restore()}}
+    else if(o.p&&o.t!=='sheet'){const q=w2s(o.p);ctx.beginPath();ctx.arc(q[0],q[1],Math.max(12,S.sheet.scale/1000*4.5*V.z),0,7);ctx.setLineDash([4,3]);ctx.stroke();ctx.setLineDash([])}}
+  // Entwurf
+  if(draft&&draft.pts.length){const pts=draft.pts.concat([snapPt||cur]);poly(pts,draft.t==='area');ctx.strokeStyle=ACC;ctx.lineWidth=2;ctx.setLineDash([6,4]);ctx.stroke();ctx.setLineDash([]);
+    draft.pts.forEach(p=>{const q=w2s(p);ctx.beginPath();ctx.arc(q[0],q[1],4,0,7);ctx.fillStyle=ACC;ctx.fill()})}
+  if(snapPt){const q=w2s(snapPt);ctx.beginPath();ctx.arc(q[0],q[1],8,0,7);ctx.strokeStyle='#e07b00';ctx.lineWidth=2;ctx.stroke()}
+  let st='E '+(S.origin.e+cur[0]).toFixed(1).replace('.',',')+' · N '+(S.origin.n-cur[1]).toFixed(1).replace('.',',')+' (UTM 32) · Plan 1:'+S.sheet.scale;
+  if(draft&&draft.pts.length){let l=0;const pts=draft.pts.concat([snapPt||cur]);for(let i=1;i<pts.length;i++)l+=dist(pts[i-1],pts[i]);st+=' · Länge '+l.toFixed(1).replace('.',',')+' m'}
+  $('#status').textContent=st;
+}
+function fit(){const b=bbox();if(!b){V.z=1;V.x=CW/2;V.y=CH/2;draw();return}const w=Math.max(b[2]-b[0],20),h=Math.max(b[3]-b[1],20);V.z=Math.min((CW-80)/w,(CH-110)/h);V.x=CW/2-(b[0]+w/2)*V.z;V.y=CH/2+8-(b[1]+h/2)*V.z;draw()}
+function zoomAt(sp,f){const w=s2w(sp);V.z=Math.max(.02,Math.min(400,V.z*f));V.x=sp[0]-w[0]*V.z;V.y=sp[1]-w[1]*V.z;draw()}
+
+/* ---------- Interaktion ---------- */
+const tolW=()=>9/V.z;
+function snap(w,skip){snapPt=null;const t=tolW();let best=t;
+  S.objs.forEach(o=>{if(!o.pts||o.t==='dim')return;o.pts.forEach((p,i)=>{if(skip&&o.id===skip.id&&i===skip.i)return;const d=dist(p,w);if(d<best){best=d;snapPt=p.slice()}})});
+  return snapPt?snapPt.slice():w}
+function hitVertex(o,sp){if(!o.pts)return -1;for(let i=0;i<o.pts.length;i++)if(dist(w2s(o.pts[i]),sp)<8)return i;return -1}
+function hitTest(w){
+  const t=tolW(),L=S.layers,rev=S.objs.slice().reverse(),mm=S.sheet.scale/1000,f=o=>L[o.t]!==false;
+  let h=rev.find(o=>f(o)&&(o.t==='sign'||o.t==='sym'||o.t==='text')&&dist(o.p,w)<Math.max(t*1.4,mm*(o.t==='text'?Math.max(4,(o.s||'').length*.9*(o.size||3)/2):4.5)));if(h)return h;
+  h=rev.find(o=>f(o)&&o.t==='dim'&&proj(o.pts,w).d<t);if(h)return h;
+  h=rev.find(o=>f(o)&&(o.t==='guard'||o.t==='line')&&proj(dense(o),w).d<t);if(h)return h;
+  h=rev.find(o=>o.t==='sheet'&&L.sheet&&(proj(sheetCorners(o).concat([sheetCorners(o)[0]]),w).d<t||(o.id===sel&&inPoly(w,sheetCorners(o)))));if(h)return h;
+  h=rev.find(o=>f(o)&&o.t==='area'&&inPoly(w,o.pts));if(h)return h;
+  return rev.find(o=>{if(o.t!=='road'||!L.road)return false;const g=rg(o),q=proj(g.D,w),sg=q.d*q.side;return sg>=g.off[0]-t&&sg<=g.off[g.off.length-1]+t&&q.d<g.W+t});
+}
+function setTool(t){tool=t;draft=null;snapPt=null;document.querySelectorAll('.tool').forEach(b=>b.setAttribute('aria-pressed',b.dataset.t===t));cv.style.cursor=t==='sel'?'default':'crosshair';hint();draw()}
+function hint(){
+  const H=$('#hint');let m='',btn='';
+  if(tool==='calib')m='Kalibrieren: Klicke zwei Punkte im eigenen Bild an, deren Abstand du kennst.';
+  else if(POLY[tool]){const n=draft?draft.pts.length:0;
+    m=tool==='dim'?'Maß: Anfangs- und Endpunkt anklicken.':n?TNAME[tool]+': weitere Punkte setzen. Doppelklick oder Enter schließt ab.':TNAME[tool]+': ersten Punkt '+(tool==='road'?'der Achse ':'')+'anklicken.';
+    if(n>=POLY[tool]&&tool!=='dim')btn='<button class="btn sm" id="hDone">Fertig</button>';if(n)btn+='<button class="btn sm" id="hEsc">Abbrechen</button>'}
+  else if(tool!=='sel')m=TNAME[tool]+': Position anklicken.';
+  H.innerHTML=m?'<span class="msg">'+m+'</span>'+btn:'';
+  const d=$('#hDone'),e=$('#hEsc');if(d)d.onclick=finish;if(e)e.onclick=()=>{draft=null;hint();draw()};
+}
+function finish(){
+  if(!draft)return;const pts=draft.pts.filter((p,i,a)=>!i||dist(w2s(p),w2s(a[i-1]))>3),t=draft.t;draft=null;snapPt=null;
+  if(pts.length<POLY[t]){hint();draw();return}
+  if(t==='calib'){askCalib(pts);setTool('sel');return}
+  let o={id:uid(),t,pts};
+  if(t==='road'){const P=PRESET[LAST.road]||PRESET.land2;Object.assign(o,{smooth:true,name:'',preset:LAST.road,kl:P.kl,strips:P.s.map(s=>({k:s[0],w:s[1]})),lines:P.l.slice(),axis:'m',st0:0,stInt:100,stDir:1,stShow:true,stFmt:P.kl==='bab'?'km':'plus'})}
+  else if(t==='line')Object.assign(o,{k:LAST.line,kl:'land',smooth:false});
+  else if(t==='area')o.k=LAST.area;
+  else if(t==='guard')Object.assign(o,{k:LAST.guard,side:1,smooth:true,int:50});
+  else if(t==='dim')o.pts=pts.slice(0,2);
+  S.objs.push(o);sel=o.id;selV=-1;commit();setTool('sel');renderProps();
+}
+function askCalib(pts){
+  if(!S.bg){toast('Kalibrieren gilt nur für ein eigenes Bild. Die Live-Karte ist bereits maßstäblich.');return}
+  const d0=dist(pts[0],pts[1]);
+  dialog('<h2>Maßstab kalibrieren</h2><p>Wie lang ist die angeklickte Strecke in Wirklichkeit?</p><label class="f"><span>Strecke in Metern</span><input type="number" id="calV" min="0.1" step="0.1" value="'+d0.toFixed(1)+'"></label>',
+    [['Abbrechen'],['Übernehmen',()=>{const v=parseFloat($('#calV').value);if(!(v>0))return;const f=v/d0,a=pts[0];S.bg.mpp*=f;S.bg.x=a[0]+(S.bg.x-a[0])*f;S.bg.y=a[1]+(S.bg.y-a[1])*f;commit();draw();toast('Kalibriert: 1 Pixel entspricht '+S.bg.mpp.toFixed(3).replace('.',',')+' m.')},'pri']]);
+}
+const PT=new Map();let drag=null,pinch=null,space=false;
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);const sp=[e.offsetX,e.offsetY];PT.set(e.pointerId,sp);
+  if(PT.size===2){const[a,b]=[...PT.values()];pinch={d:dist(a,b),c:[(a[0]+b[0])/2,(a[1]+b[1])/2],z:V.z,x:V.x,y:V.y};drag=null;if(draft&&draft.pts.length)draft.pts.pop();return}
+  const w=s2w(sp);cur=w;
+  if(e.button===1||e.button===2||space){drag={m:'pan',sp,x:V.x,y:V.y};return}
+  if(tool==='sel'){
+    const o=selObj();if(o){const vi=hitVertex(o,sp);if(vi>=0){selV=vi;drag={m:'vtx',i:vi};draw();return}}
+    const h=hitTest(w);
+    if(h){if(h.id!==sel){sel=h.id;renderProps()}selV=-1;drag={m:'move',w0:w,o0:JSON.parse(JSON.stringify(h))}}
+    else{if(sel!=null){sel=null;renderProps()}selV=-1;drag={m:'pan',sp,x:V.x,y:V.y}}
+    draw();return}
+  if(POLY[tool]){const p=snap(w);if(!draft)draft={t:tool,pts:[]};draft.pts.push(p);if((tool==='dim'||tool==='calib')&&draft.pts.length===2){finish();return}hint();draw();return}
+  let o={id:uid(),t:tool,p:w};
+  if(tool==='sign')Object.assign(o,{vz:LAST.sign,txt:'',rot:0});
+  else if(tool==='sym')Object.assign(o,{k:LAST.sym,rot:0,len:5});
+  else if(tool==='text')Object.assign(o,{s:'Text',size:3,rot:0,box:true});
+  else if(tool==='sheet')o.rot=0;
+  S.objs.push(o);sel=o.id;selV=-1;commit();if(tool==='text'||tool==='sheet')setTool('sel');renderProps();draw();
+});
+cv.addEventListener('pointermove',e=>{
+  const sp=[e.offsetX,e.offsetY];if(PT.has(e.pointerId))PT.set(e.pointerId,sp);
+  if(pinch&&PT.size===2){const[a,b]=[...PT.values()],d=dist(a,b),c=[(a[0]+b[0])/2,(a[1]+b[1])/2],w=[(pinch.c[0]-pinch.x)/pinch.z,(pinch.c[1]-pinch.y)/pinch.z];
+    V.z=Math.max(.02,Math.min(400,pinch.z*d/pinch.d));V.x=c[0]-w[0]*V.z;V.y=c[1]-w[1]*V.z;draw();return}
+  const w=s2w(sp);cur=w;
+  if(drag){
+    if(drag.m==='pan'){V.x=drag.x+sp[0]-drag.sp[0];V.y=drag.y+sp[1]-drag.sp[1]}
+    else if(drag.m==='vtx'){const o=selObj();if(o){o.pts[drag.i]=snap(w,{id:o.id,i:drag.i});drag.moved=true}}
+    else if(drag.m==='move'){const o=selObj(),dx=w[0]-drag.w0[0],dy=w[1]-drag.w0[1];if(o&&Math.hypot(dx,dy)*V.z>3){drag.moved=true;
+      if(o.pts)o.pts=drag.o0.pts.map(p=>[p[0]+dx,p[1]+dy]);else o.p=[drag.o0.p[0]+dx,drag.o0.p[1]+dy]}}
+  }else if(POLY[tool])snap(w);
+  draw();
+});
+function up(e){PT.delete(e.pointerId);if(PT.size<2)pinch=null;if(drag&&drag.moved){snapPt=null;commit()}drag=null;draw()}
+cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{e.preventDefault();zoomAt([e.offsetX,e.offsetY],Math.exp(-e.deltaY*.0015))},{passive:false});
+cv.addEventListener('dblclick',e=>{
+  if(draft){finish();return}
+  if(tool!=='sel')return;const o=selObj();if(!o||!o.pts||o.t==='dim')return;const w=s2w([e.offsetX,e.offsetY]);
+  const P=o.t==='area'?o.pts.concat([o.pts[0]]):o.pts,q=proj(P,w);if(q.d<tolW()*1.5&&hitVertex(o,[e.offsetX,e.offsetY])<0){o.pts.splice(q.i,0,w);selV=q.i;commit();draw()}
+});
+window.addEventListener('keydown',e=>{
+  const inF=/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName||'')||$('#dlg').open;
+  if((e.ctrlKey||e.metaKey)&&!inF){const k=e.key.toLowerCase();if(k==='z'){e.preventDefault();undo(e.shiftKey?1:-1)}else if(k==='y'){e.preventDefault();undo(1)}return}
+  if(inF)return;
+  if(e.key===' '){space=true;e.preventDefault();return}
+  if(e.key==='Enter'){finish();return}
+  if(e.key==='Escape'){if(draft){draft=null;hint()}else if(tool!=='sel')setTool('sel');else{sel=null;selV=-1;renderProps()}draw();return}
+  if(e.key==='Backspace'&&draft){draft.pts.pop();if(!draft.pts.length)draft=null;hint();draw();e.preventDefault();return}
+  if(e.key==='Delete'||e.key==='Backspace'){del();e.preventDefault();return}
+  const t=TOOLS.find(t=>t[2].toLowerCase()===e.key.toLowerCase());if(t)setTool(t[0]);
+});
+window.addEventListener('keyup',e=>{if(e.key===' ')space=false});
+function del(){const o=selObj();if(!o)return;const min=o.t==='area'?3:2;
+  if(o.pts&&selV>=0&&o.pts.length>min){o.pts.splice(selV,1);selV=-1}else{S.objs=S.objs.filter(x=>x!==o);sel=null;selV=-1}
+  commit();renderProps();draw()}
+
+/* ---------- Eigenschaften ---------- */
+let HN=[];
+const reg=fn=>{HN.push(fn);return HN.length-1};
+const opt=(m,v)=>Object.entries(m).map(([k,n])=>'<option value="'+esc(k)+'"'+(String(k)===String(v)?' selected':'')+'>'+esc(Array.isArray(n)?n[0]:n)+'</option>').join('');
+function fNum(l,o,k,a={}){const i=reg(el=>{const v=parseFloat(el.value);if(!isNaN(v))o[k]=a.set?a.set(v):v});const v=a.get?a.get(o[k]):o[k];
+  return '<label class="f"><span>'+l+'</span><input type="number" id="f'+i+'" data-h="'+i+'" value="'+(v??'')+'" step="'+(a.step||1)+'"'+(a.min!=null?' min="'+a.min+'"':'')+(a.re?' data-re="1"':'')+'></label>'}
+function fTxt(l,o,k,a={}){const i=reg(el=>{o[k]=el.value;if(a.after)a.after(el.value)});return '<label class="f"><span>'+l+'</span><input type="text" id="f'+i+'" data-h="'+i+'" value="'+esc(o[k])+'"'+(a.list?' list="'+a.list+'"':'')+(a.ph?' placeholder="'+esc(a.ph)+'"':'')+'></label>'}
+function fSel(l,o,k,m,a={}){const i=reg(el=>{let v=el.value;if(a.num)v=+v;o[k]=v;if(a.after)a.after(v)});return '<label class="f"><span>'+l+'</span><select id="f'+i+'" data-h="'+i+'"'+(a.re?' data-re="1"':'')+'>'+opt(m,o[k])+'</select></label>'}
+function fChk(l,o,k){const i=reg(el=>{o[k]=el.checked});return '<label class="chk"><input type="checkbox" id="f'+i+'" data-h="'+i+'"'+(o[k]?' checked':'')+'>'+l+'</label>'}
+function fRng(l,o,k,min,max,step){const i=reg(el=>{o[k]=+el.value});return '<label class="f"><span>'+l+'</span><input type="range" id="f'+i+'" data-h="'+i+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+(o[k]??max)+'"></label>'}
+function bt(l,fn,cls=''){return '<button class="btn sm '+cls+'" data-c="'+reg(fn)+'">'+l+'</button>'}
+function polyLen(o){const D=o.smooth!==undefined?dense(o):o.pts;const c=cum(D);return c[c.length-1]}
+function renderProps(){
+  HN=[];const P=$('#props'),o=selObj();let h='';
+  if(!o){
+    const sheets=S.objs.filter(x=>x.t==='sheet').length;
+    h+='<h2>Plan</h2><p>Nichts ausgewählt. Hier stellst du Blatt, Plankopf und Darstellung ein.</p>';
+    h+='<h3>Blatt und Maßstab</h3>'+fSel('Papier',S.sheet,'paper',{A4:'A4',A3:'A3',A2:'A2',A1:'A1',A0:'A0'})+fSel('Ausrichtung',S.sheet,'orient',{quer:'Querformat',hoch:'Hochformat'})
+      +fSel('Maßstab',S.sheet,'scale',{250:'1:250',500:'1:500',1000:'1:1000',2000:'1:2000',2500:'1:2500',5000:'1:5000'},{num:1})
+      +fNum('Nord (Grad)',S.sheet,'north',{step:1})+'<p>'+sheets+' Blatt'+(sheets===1?'':'rahmen')+' im Plan. Jeder Rahmen wird eine PDF-Seite.</p>'
+      +fChk('Legende im PDF',S.sheet,'legend')+fChk('Karte / Luftbild mitdrucken',S.sheet,'bgPrint');
+    h+='<h3>Plankopf</h3>'+fTxt('Projekt',S.meta,'projekt',{ph:'z. B. A 81, AS Pleidelsheim'})+fTxt('Planinhalt',S.meta,'inhalt')+fTxt('Auftraggeber',S.meta,'ag')+fTxt('Planverfasser',S.meta,'verfasser')
+      +fTxt('Bearbeitet',S.meta,'bearb')+fTxt('Plan-Nr.',S.meta,'plannr')+fTxt('Datum',S.meta,'datum');
+    h+='<h3>Darstellung</h3>'+fSel('Stil',S,'style',{farbe:'Farbig',linie:'Strichzeichnung'})+fRng('Flächen deckend',S,'surfAlpha',.15,1,.05);
+    h+='<h3>Kartengrundlage</h3>'+fSel('Live-Karte',S.map,'k',Object.assign({none:'keine'},Object.fromEntries(Object.entries(MAPS).map(([k,v])=>[k,v.n]))))+fRng('Deckkraft',S.map,'alpha',.1,1,.05)
+      +'<p>Luftbild für Baden-Württemberg, Karte für ganz Deutschland. Lage in ETRS89 / UTM 32N.</p>';
+    h+='<h3>Eigenes Bild</h3>';
+    if(S.bg)h+=fRng('Deckkraft',S.bg,'alpha',.1,1,.05)+'<p>1 Pixel = '+S.bg.mpp.toFixed(3).replace('.',',')+' m, Bildbreite '+(S.bg.w*S.bg.mpp).toFixed(0)+' m.</p><div class="row">'+bt('Neu kalibrieren',()=>setTool('calib'))+bt('Entfernen',()=>{S.bg=null;BGDATA=null;BGIMG=null;persistBg();commit();renderProps();draw()},'warn')+'</div>';
+    else h+='<p>Optional: einen gescannten Plan oder ein eigenes Luftbild (PNG, JPG) über die Karte legen und über eine bekannte Strecke kalibrieren.</p><div class="row">'+bt('Eigenes Bild laden',()=>$('#inBg').click())+'</div>';
+  }else{
+    h+='<h2>'+TNAME[o.t]+'</h2>';
+    if(o.t==='road'){const g=rg(o);
+      h+='<p>Länge '+g.len.toFixed(1).replace('.',',')+' m, Breite '+g.W.toFixed(2).replace('.',',')+' m. Der Pfeil am Anfang zeigt die Achsrichtung.</p>'
+        +fTxt('Bezeichnung',o,'name',{ph:'z. B. A 81'})
+        +fSel('Querschnitt',o,'preset',Object.fromEntries(Object.entries(PRESET).map(([k,v])=>[k,v.n])),{re:1,after:v=>{const p=PRESET[v];o.kl=p.kl;o.strips=p.s.map(s=>({k:s[0],w:s[1]}));o.lines=p.l.slice();o.axis='m';LAST.road=v}})
+        +fSel('Markierung nach',o,'kl',Object.fromEntries(Object.entries(KL).map(([k,v])=>[k,v.n+' ('+v.d[0]+'/'+v.d[1]+' m)'])))
+        +fChk('Achse ausrunden',o,'smooth');
+      h+='<h3>Querschnitt von links nach rechts</h3><div class="xs">';
+      const ci=1,lineRow=i=>{const j=reg(el=>{o.lines[i]=el.value});return '<div class="strip ln"><span class="sw"></span><select id="f'+j+'" data-h="'+j+'" aria-label="Linie '+(i+1)+'">'+opt(Object.fromEntries(ROADLINES.map(k=>[k,LINE[k]])),o.lines[i]||'none')+'</select></div>'};
+      o.strips.forEach((s,i)=>{h+=lineRow(i);const a=reg(el=>{s.k=el.value}),b=reg(el=>{const v=parseFloat(el.value);if(v>0)s.w=v});
+        h+='<div class="strip"><span class="sw" style="background:'+(STRIP[s.k]||STRIP.fs)[ci]+'"></span><select id="f'+a+'" data-h="'+a+'" data-re="1" aria-label="Streifenart '+(i+1)+'">'+opt(STRIP,s.k)+'</select>'
+          +'<input type="number" id="f'+b+'" data-h="'+b+'" data-re="1" step="0.05" min="0.1" value="'+s.w+'" aria-label="Breite in m">'
+          +'<button data-c="'+reg(()=>{if(o.strips.length<2)return;o.strips.splice(i,1);o.lines.splice(i+1,1);o.axis='m';commit();renderProps();draw()})+'" title="Streifen entfernen" aria-label="Streifen entfernen">✕</button></div>'});
+      h+=lineRow(o.strips.length)+'</div><div class="row">'+bt('Streifen links',()=>{o.strips.unshift({k:'fs',w:3.5});o.lines.unshift('none');commit();renderProps();draw()})
+        +bt('Streifen rechts',()=>{o.strips.push({k:'fs',w:3.5});o.lines.push('none');commit();renderProps();draw()})+'</div>';
+      const ax={m:'Mitte des Querschnitts'};g.off.forEach((_,i)=>{ax[i]=i===0?'linker Rand':i===g.off.length-1?'rechter Rand':'zwischen Streifen '+i+' und '+(i+1)});
+      h+=fSel('Achse liegt',o,'axis',ax,{after:v=>{o.axis=v==='m'?'m':+v}});
+      h+='<h3>Stationierung</h3>'+fChk('Stationen anzeigen',o,'stShow')+fNum('Anfang (m)',o,'st0',{step:10})+fNum('Abstand (m)',o,'stInt',{step:10,min:5})
+        +fSel('Richtung',o,'stDir',{1:'steigend in Achsrichtung','-1':'fallend in Achsrichtung'},{num:1})+fSel('Schreibweise',o,'stFmt',{km:'km 12,400',plus:'0+100'});
+      h+='<div class="row">'+bt('Achsrichtung umkehren',()=>{o.pts.reverse();commit();draw()})+bt('Blätter entlang der Straße',()=>autoSheets(o))+'</div>';
+    }else if(o.t==='line'){h+='<p>Länge '+polyLen(o).toFixed(1).replace('.',',')+' m</p>'+fSel('Art',o,'k',Object.fromEntries(Object.entries(LINE).filter(e=>e[0]!=='none')),{after:v=>LAST.line=v})
+        +fSel('Strichbreiten',o,'kl',Object.fromEntries(Object.entries(KL).map(([k,v])=>[k,v.n])))+fChk('Ausrunden',o,'smooth');
+    }else if(o.t==='area'){h+=fSel('Art',o,'k',AREA,{after:v=>LAST.area=v})+'<p>Eine Fahrbahnfläche deckt durchlaufende Markierung ab, etwa in Knotenpunkten.</p>';
+    }else if(o.t==='guard'){h+='<p>Länge '+polyLen(o).toFixed(1).replace('.',',')+' m</p>'+fSel('Art',o,'k',GUARD,{re:1,after:v=>LAST.guard=v})
+        +(o.k==='sp'?fSel('Pfostenseite',o,'side',{1:'rechts',"-1":'links'},{num:1}):'')+(o.k==='leitpf'?fNum('Abstand (m)',o,'int',{step:5,min:5}):'')+fChk('Ausrunden',o,'smooth');
+    }else if(o.t==='sign'){h+=fTxt('VZ-Nummer',o,'vz',{list:'vzl',after:v=>{LAST.sign=v;const n=$('#vzn');if(n)n.textContent=VZ[v]||'Freie Nummer, Symbol nach Zeichengruppe.'}})
+        +'<datalist id="vzl">'+Object.entries(VZ).map(([k,n])=>'<option value="'+k+'">'+esc(n)+'</option>').join('')+'</datalist><p id="vzn">'+esc(VZ[o.vz]||'Freie Nummer, Symbol nach Zeichengruppe.')+'</p>'
+        +fTxt('Zusatz',o,'txt',{ph:'z. B. ZZ 1004-31, 400 m'})+fNum('Drehung (Grad)',o,'rot',{step:15})+'<p>Die Symbole sind vereinfacht. Maßgebend ist die VZ-Nummer.</p>';
+    }else if(o.t==='sym'){h+=fSel('Symbol',o,'k',SYM,{re:1,after:v=>LAST.sym=v})+fNum('Drehung (Grad)',o,'rot',{step:15})+(o.k.startsWith('pf_')?fNum('Länge (m)',o,'len',{step:.5,min:1}):o.k==='baum'?fNum('Kronenradius (m)',o,'len',{step:.5,min:.5}):'');
+    }else if(o.t==='text'){h+=fTxt('Text',o,'s')+fNum('Schrifthöhe (mm)',o,'size',{step:.5,min:1.5})+fNum('Drehung (Grad)',o,'rot',{step:15})+fChk('Fett',o,'bold')+fChk('Weiß hinterlegt',o,'box');
+    }else if(o.t==='dim'){h+='<p>Gemessene Länge: '+dist(o.pts[0],o.pts[1]).toFixed(2).replace('.',',')+' m. Ziehe die Endpunkte, sie rasten an Stützpunkten ein.</p>';
+    }else if(o.t==='sheet'){const f=frame(),k=S.sheet.scale/1000;
+      h+='<p>Planfläche '+(f.aw*k).toFixed(0)+' × '+(f.ah*k).toFixed(0)+' m bei 1:'+S.sheet.scale+' auf '+S.sheet.paper+'. Papier und Maßstab gelten für alle Blätter.</p>'
+        +fNum('Drehung (Grad)',o,'rot',{step:5,get:v=>Math.round((v||0)*180/Math.PI*10)/10,set:v=>v*Math.PI/180})
+        +'<div class="row">'+bt('An Straße ausrichten',()=>{let b=null;S.objs.forEach(r=>{if(r.t!=='road')return;const g=rg(r),q=proj(g.D,o.p);if(!b||q.d<b.d)b={d:q.d,a:at(g.D,g.c,q.s).a}});if(b){o.rot=b.a;commit();renderProps();draw()}else toast('Keine Straße im Plan.')})+'</div>';
+    }
+    h+='<h3>Aktion</h3><div class="row">'+bt('Duplizieren',()=>{const c=JSON.parse(JSON.stringify(o));c.id=uid();const d=20*S.sheet.scale/1000;if(c.pts)c.pts=c.pts.map(p=>[p[0]+d,p[1]+d]);else c.p=[c.p[0]+d,c.p[1]+d];S.objs.push(c);sel=c.id;commit();renderProps();draw()})
+      +bt('Löschen',del,'warn')+'</div>'+(o.pts&&o.t!=='dim'?'<p>Stützpunkte ziehen zum Verformen. Doppelklick auf die Linie fügt einen Punkt ein, Entf löscht den markierten.</p>':'');
+  }
+  P.innerHTML=h;
+}
+$('#props').addEventListener('input',e=>{const i=e.target.dataset.h;if(i==null)return;HN[i](e.target);draw()});
+$('#props').addEventListener('change',e=>{const el=e.target;if(el.dataset.h==null)return;commit();if(el.dataset.re)renderProps()});
+$('#props').addEventListener('click',e=>{const b=e.target.closest('[data-c]');if(b)HN[b.dataset.c]()});
+
+/* ---------- Dialog, Meldung, Dateien ---------- */
+function dialog(html,btns){const d=$('#dlg');d.innerHTML=html+'<div class="row">'+btns.map((b,i)=>'<button class="btn '+(b[2]||'')+'" data-i="'+i+'">'+b[0]+'</button>').join('')+'</div>';
+  d.onclick=e=>{const i=e.target.dataset?.i;if(i==null)return;const r=btns[i][1]&&btns[i][1]();if(r!=='keep')d.close()};d.showModal()}
+let tt=0;function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(tt);tt=setTimeout(()=>t.style.display='none',5200)}
+const DLP=window.claude&&window.claude.use?window.claude.use('downloads').catch(()=>null):Promise.resolve(null);
+async function saveFile(name,data){
+  const dl=await DLP;
+  if(!dl){ if(!window.claude){const a=document.createElement('a');a.href=URL.createObjectURL(data instanceof Blob?data:new Blob([data]));a.download=name;document.body.appendChild(a);a.click();a.remove();return true}
+    toast('Speichern ist in dieser Ansicht nicht möglich. Öffne das Tool direkt in Claude.');return false}
+  try{await dl.save({filename:name,data});toast('Gespeichert: '+name);return true}
+  catch(e){if(e&&e.code==='declined')return false;toast('Speichern hat nicht geklappt ('+((e&&e.code)||'unbekannter Fehler')+'). Versuch es noch einmal.');return false}
+}
+const fname=()=>(S.meta.projekt||'Bestandsplan').replace(/[^\wäöüÄÖÜß.-]+/g,'_').slice(0,60)||'Bestandsplan';
+function setBg(data,then){const im=new Image();im.onload=()=>{BGIMG=im;BGDATA=data;then&&then(im);draw()};im.onerror=()=>toast('Das Bild lässt sich nicht lesen. Verwende PNG oder JPG.');im.src=data}
+$('#inBg').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const rd=new FileReader();rd.onload=()=>{
+  const raw=new Image();raw.onload=()=>{let data=rd.result;const mx=Math.max(raw.width,raw.height);
+    if(mx>5000){const k=5000/mx,c=document.createElement('canvas');c.width=Math.round(raw.width*k);c.height=Math.round(raw.height*k);c.getContext('2d').drawImage(raw,0,0,c.width,c.height);data=c.toDataURL('image/jpeg',.9)}
+    setBg(data,im=>{const ctr=s2w([CW/2,CH/2]),mpp=S.bg?S.bg.mpp:.25;S.bg={x:ctr[0]-im.width*mpp/2,y:ctr[1]-im.height*mpp/2,mpp,w:im.width,h:im.height,alpha:1};S.layers.bg=true;persistBg();commit();sel=null;renderProps();renderTools();fit();setTool('calib')})};
+  raw.onerror=()=>toast('Das Bild lässt sich nicht lesen. Verwende PNG oder JPG.');raw.src=rd.result};rd.readAsDataURL(f)};
+$('#inProj').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(!o||!Array.isArray(o.objs))throw 0;
+  const bd=o.bgData;delete o.bgData;loadState(o);BGDATA=null;BGIMG=null;if(bd&&S.bg)setBg(bd,()=>persistBg());else{S.bg=null;persistBg()}hist=[];hi=-1;commit();renderTools();renderProps();fit();toast('Projekt geladen.')}
+  catch(_){toast('Das ist keine Projektdatei dieses Editors.')}};rd.readAsText(f)};
+$('#bBg').onclick=()=>$('#inBg').click();
+$('#bOpen').onclick=()=>$('#inProj').click();
+$('#bSave').onclick=()=>saveFile(fname()+'.json',JSON.stringify(Object.assign({},S,{bgData:BGDATA})));
+$('#bCal').onclick=()=>S.bg?setTool('calib'):toast('Kalibrieren gilt nur für ein eigenes Bild. Die Live-Karte ist bereits maßstäblich.');
+$('#bUndo').onclick=()=>undo(-1);$('#bRedo').onclick=()=>undo(1);
+$('#zIn').onclick=()=>zoomAt([CW/2,CH/2],1.4);$('#zOut').onclick=()=>zoomAt([CW/2,CH/2],1/1.4);$('#zFit').onclick=fit;
+$('#bNew').onclick=()=>dialog('<h2>Neuen Plan beginnen?</h2><p>Der aktuelle Plan wird geleert. Speichere ihn vorher als Projektdatei, wenn du ihn behalten willst.</p>',
+  [['Abbrechen'],['Plan leeren',()=>{const m=S.meta,sh=S.sheet;const c=s2w([CW/2,CH/2]),o=S.origin,mp=S.map;S=blank();S.meta.verfasser=m.verfasser;S.sheet=sh;S.map=mp;S.origin={e:Math.round((o.e+c[0])/100)*100,n:Math.round((o.n-c[1])/100)*100};V.x=CW/2-(o.e+c[0]-S.origin.e)*V.z;V.y=CH/2-(o.n-c[1]-S.origin.n)*-1*V.z;BGDATA=null;BGIMG=null;persistBg();sel=null;selV=-1;commit();renderTools();renderProps();draw()},'pri']]);
+function renderTools(){
+  $('#tools').innerHTML='<h2>Werkzeuge</h2>'+TOOLS.map(t=>'<button class="tool" data-t="'+t[0]+'" aria-pressed="'+(tool===t[0])+'">'+t[1]+'<kbd>'+t[2]+'</kbd></button>').join('')
+    +'<h2 style="margin-top:14px">Ebenen</h2><div class="layers">'+LAYERS.map(l=>'<label><input type="checkbox" id="ly_'+l[0]+'" data-l="'+l[0]+'"'+(S.layers[l[0]]?' checked':'')+'>'+l[1]+'</label>').join('')+'</div>';
+}
+$('#tools').addEventListener('click',e=>{const b=e.target.closest('.tool');if(b)setTool(b.dataset.t)});
+$('#tools').addEventListener('change',e=>{const l=e.target.dataset.l;if(l){S.layers[l]=e.target.checked;persist();draw()}});
+
+/* ---------- Ortssuche ---------- */
+function goTo(h){
+  const[E,N]=utm32(+h.lat,+h.lon);
+  $('#q').blur();cv.focus();
+  if(!S.objs.length&&!S.bg)S.origin={e:Math.round(E/100)*100,n:Math.round(N/100)*100};
+  if(S.map.k==='none')S.map.k='dop';S.layers.bg=true;
+  V.z=1.6;V.x=CW/2-(E-S.origin.e)*V.z;V.y=CH/2-(S.origin.n-N)*V.z;commit();renderTools();renderProps();draw();
+}
+$('#fSearch').onsubmit=async e=>{
+  e.preventDefault();const q=$('#q').value.trim();if(!q)return;
+  try{const r=await fetch('/geocode?format=jsonv2&limit=6&countrycodes=de&q='+encodeURIComponent(q));if(!r.ok)throw 0;const a=await r.json();
+    if(!a.length){toast('Nichts gefunden. Versuch es mit Straße und Ort.');return}
+    if(a.length===1){goTo(a[0]);return}
+    dialog('<h2>Treffer</h2><div class="hits">'+a.map((h,i)=>'<button class="btn" data-g="'+i+'">'+esc(h.display_name)+'</button>').join('')+'</div><p style="margin-top:10px;font-size:12px">Suche: © OpenStreetMap-Mitwirkende</p>',[['Schließen']]);
+    $('#dlg').querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{$('#dlg').close();goTo(a[b.dataset.g])});
+  }catch(_){toast('Die Suche ist gerade nicht erreichbar. Versuch es gleich noch einmal.')}
+};
+
+/* ---------- Blätter, Liste ---------- */
+function autoSheets(r){
+  const g=rg(r),f=frame(),w=f.aw*S.sheet.scale/1000,step=w*.9,n=Math.max(1,Math.ceil((g.len-w*.1)/step));
+  dialog('<h2>Blätter entlang der Straße</h2><p>Bei 1:'+S.sheet.scale+' auf '+S.sheet.paper+' passen '+w.toFixed(0)+' m auf ein Blatt. Für '+g.len.toFixed(0)+' m entstehen '+n+' Blätter mit 10 % Überlappung. Vorhandene Blattrahmen werden ersetzt.</p>',
+    [['Abbrechen'],['Blätter anlegen',()=>{S.objs=S.objs.filter(o=>o.t!=='sheet');
+      for(let i=0;i<n;i++){const sc=Math.min(g.len,w/2-w*.05+i*step),a=at(g.D,g.c,Math.max(0,sc-step/2)).p,b=at(g.D,g.c,Math.min(g.len,sc+step/2)).p,m=at(g.D,g.c,sc).p;
+        S.objs.push({id:uid(),t:'sheet',p:[(a[0]+b[0]+2*m[0])/4,(a[1]+b[1]+2*m[1])/4],rot:Math.atan2(b[1]-a[1],b[0]-a[0])})}
+      S.layers.sheet=true;commit();renderTools();renderProps();draw()},'pri']]);
+}
+function listData(){
+  const roads=S.objs.filter(o=>o.t==='road').map(r=>({r,g:rg(r)})),rows=[];
+  const near=p=>{let b=null;roads.forEach(x=>{const q=proj(x.g.D,p);if(!b||q.d<b.q.d)b={x,q}});return b};
+  S.objs.forEach(o=>{if(o.t==='sign'){const b=near(o.p);rows.push(['Verkehrszeichen','Z '+o.vz,VZ[o.vz]||'',o.txt||'',b?b.x.r.name||'Straße':'',b?fmtSt((+b.x.r.st0||0)+(b.x.r.stDir===-1?-1:1)*b.q.s,b.x.r.stFmt):'',b?(b.q.side>0?'rechts':'links'):'',''])}
+    else if(o.t==='guard'){const D=dense(o),b=near(D[0]),e=b&&{x:b.x,q:proj(b.x.g.D,D[D.length-1])},f=x=>x?fmtSt((+x.x.r.st0||0)+(x.x.r.stDir===-1?-1:1)*x.q.s,x.x.r.stFmt):'';
+      rows.push(['Schutzeinrichtung',GUARD[o.k],'','',b?b.x.r.name||'Straße':'',f(b)+(e?' bis '+f(e):''),b?(b.q.side>0?'rechts':'links'):'',polyLen(o).toFixed(1).replace('.',',')])}});
+  roads.forEach(x=>rows.unshift(['Straße',x.r.name||'ohne Bezeichnung',PRESET[x.r.preset]?.n||'','Breite '+x.g.W.toFixed(2).replace('.',',')+' m','','','',x.g.len.toFixed(1).replace('.',',')]));
+  return{head:['Art','Element','Bezeichnung','Zusatz','Straße','Station','Seite','Länge m'],rows};
+}
+$('#bList').onclick=()=>{const d=listData();
+  dialog('<h2>Bestandsliste</h2>'+(d.rows.length?'<div class="tw"><table><thead><tr>'+d.head.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+d.rows.map(r=>'<tr>'+r.map(c=>'<td>'+esc(c)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>':'<p>Der Plan enthält noch keine Straßen, Verkehrszeichen oder Schutzeinrichtungen.</p>'),
+    [['Schließen'],['Als CSV speichern',()=>{saveFile(fname()+'_Bestandsliste.csv','﻿'+[d.head].concat(d.rows).map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(';')).join('\r\n'));return 'keep'},'pri']])};
+
+/* ---------- PDF ---------- */
+const lat=s=>String(s).replace(/[–—]/g,'-').replace(/[„“”]/g,'"').replace(/[‚‘’]/g,"'").replace(/[^\x00-\xff]/g,'?');
+function pdfG(doc,sh,f){
+  const sc=S.sheet.scale,k=1000/sc,rot=sh.rot||0,c=Math.cos(rot),s=Math.sin(rot),ox=f.ax+f.aw/2,oy=f.ay+f.ah/2;
+  const M=p=>{const vx=p[0]-sh.p[0],vy=p[1]-sh.p[1];return[ox+(vx*c+vy*s)*k,oy+(-vx*s+vy*c)*k]};
+  const paint=(st,fn)=>{const a=st.alpha,tr=a!=null&&a<1;if(tr){doc.saveGraphicsState();doc.setGState(new doc.GState({opacity:a,'stroke-opacity':a}))}
+    if(st.fill)doc.setFillColor(st.fill);
+    if(st.stroke){doc.setDrawColor(st.stroke);doc.setLineWidth(Math.max((st.w||0)*k,.08));doc.setLineDashPattern((st.dash||[]).map(d=>Math.max(d*k,.15)),0);doc.setLineCap('butt');doc.setLineJoin('round')}
+    fn(st.fill&&st.stroke?'FD':st.fill?'F':'S');if(tr)doc.restoreGraphicsState()};
+  return{pdf:true,rot,mm:x=>x*sc/1000,vis:()=>true,
+    path(pts,closed,st){if(pts.length<2||(!st.fill&&!st.stroke))return;paint(st,m=>{let q=M(pts[0]);doc.moveTo(q[0],q[1]);for(let i=1;i<pts.length;i++){q=M(pts[i]);doc.lineTo(q[0],q[1])}if(closed)doc.close();m==='FD'?doc.fillStroke():m==='F'?doc.fill():doc.stroke()})},
+    circle(x,y,r,st){if(!st.fill&&!st.stroke)return;const q=M([x,y]);paint(st,m=>doc.circle(q[0],q[1],r*k,m))},
+    tw(str,size,bold){doc.setFont('helvetica',bold?'bold':'normal');return doc.getStringUnitWidth(lat(str))*size},
+    txt(str,x,y,size,a,color,bold){str=lat(str);const q=M([x,y]),ar=a-rot,ms=size*k,dx=Math.cos(ar),dy=Math.sin(ar);doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(ms*72/25.4);doc.setTextColor(color);
+      const w=doc.getStringUnitWidth(str)*ms;doc.text(str,q[0]-dx*w/2-dy*ms*.35,q[1]-dy*w/2+dx*ms*.35,{angle:-ar*180/Math.PI})}};
+}
+async function bgRaster(sh,f){
+  const pr=S.layers.bg&&S.sheet.bgPrint,m=pr&&MAPS[S.map.k],img=pr&&S.bg&&BGIMG;if(!m&&!img)return null;
+  let dpi=200;while(f.aw/25.4*dpi*f.ah/25.4*dpi>14e6)dpi-=10;const c=document.createElement('canvas');c.width=Math.round(f.aw/25.4*dpi);c.height=Math.round(f.ah/25.4*dpi);
+  const x=c.getContext('2d'),mPerPx=S.sheet.scale/1000*25.4/dpi;x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(-(sh.rot||0));x.scale(1/mPerPx,1/mPerPx);x.translate(-sh.p[0],-sh.p[1]);
+  x.imageSmoothingQuality='high';let miss=0;
+  if(m){const cs=sheetCorners(sh),b=[Math.min(...cs.map(p=>p[0])),Math.min(...cs.map(p=>p[1])),Math.max(...cs.map(p=>p[0])),Math.max(...cs.map(p=>p[1]))];
+    let li=RES.findIndex(r=>r>=mPerPx*.8);if(li<0)li=RES.length-1;
+    const cnt=i=>{const R=tileRange(RES[i],b);return(R.ix1-R.ix0+1)*(R.iy1-R.iy0+1)};while(li<RES.length-1&&cnt(li)>260)li++;
+    const R=tileRange(RES[li],b),ps=[];for(let ix=R.ix0;ix<=R.ix1;ix++)for(let iy=R.iy0;iy<=R.iy1;iy++)ps.push(getTile(S.map.k,RES[li],ix,iy,true).p);
+    await Promise.all(ps);x.globalAlpha=S.map.alpha??1;miss=drawTiles(x,S.map.k,RES[li],b,false);x.globalAlpha=1}
+  if(img){x.globalAlpha=S.bg.alpha??1;x.drawImage(BGIMG,S.bg.x,S.bg.y,S.bg.w*S.bg.mpp,S.bg.h*S.bg.mpp)}
+  return{data:c.toDataURL('image/jpeg',.86),miss,att:m?m.att:''};
+}
+function titleBlock(doc,f,i,n,sh){
+  const m=S.meta,x0=f.ax,y0=f.ay+f.ah,W=f.aw,x1=x0+W,y1=y0+TB,wide=W>=230,wN=wide?56:42,wM=wide?54:44,wV=wide?58:0,xN=x1-wN,xM=xN-wM,xV=xM-wV;
+  doc.setDrawColor('#111111');doc.setLineDashPattern([],0);doc.setLineWidth(.5);doc.rect(f.ax,f.ay,f.aw,f.ah+TB,'S');doc.setLineWidth(.35);doc.line(x0,y0,x1,y0);
+  [xN,xM].concat(wide?[xV]:[]).forEach(x=>doc.line(x,y0,x,y1));
+  const T=(s,x,y,pt,b,col,mw)=>{doc.setFont('helvetica',b?'bold':'normal');doc.setFontSize(pt);doc.setTextColor(col||'#111111');s=lat(s);if(mw)s=doc.splitTextToSize(s,mw)[0]||'';doc.text(s,x,y)};
+  const cap=(s,x,y)=>T(s,x,y,6,0,'#666666'),pw=xV-x0-6;
+  cap('PROJEKT',x0+3,y0+5);T(m.projekt||'-',x0+3,y0+11,13,1,0,pw);cap('PLANINHALT',x0+3,y0+16);T(m.inhalt||'Bestandsplan',x0+3,y0+21,10,0,0,pw);
+  T((m.ag?'Auftraggeber: '+m.ag:'')+(!wide&&m.verfasser?(m.ag?'   ':'')+'Verfasser: '+m.verfasser:''),x0+3,y0+27,8,0,0,pw);
+  if(wide){cap('PLANVERFASSER',xV+3,y0+5);T(m.verfasser||'-',xV+3,y0+11,11,1,0,wV-6);cap('BEARBEITET',xV+3,y0+16);T(m.bearb||'-',xV+3,y0+21,9,0,0,wV-6)}
+  cap('MASSSTAB',xM+3,y0+5);T('1:'+S.sheet.scale,xM+3,y0+12.5,18,1);T('Datum: '+(m.datum||'-'),xM+3,y0+18.5,8,0,0,wM-6);T('Plan-Nr.: '+(m.plannr||'-'),xM+3,y0+22.8,8,0,0,wM-6);T('Blatt '+(i+1)+' / '+n,xM+3,y0+27.2,8,1);
+  // Nordpfeil
+  const na=(S.sheet.north||0)*Math.PI/180-(sh.rot||0),cx=x1-9,cy=y0+10,c=Math.cos(na),s=Math.sin(na),R=([u,v])=>[cx+u*c-v*s,cy+u*s+v*c],A=[[0,-6],[2.6,4.5],[0,2.4],[-2.6,4.5]].map(R);
+  doc.setFillColor('#111111');doc.moveTo(A[0][0],A[0][1]);A.slice(1).forEach(p=>doc.lineTo(p[0],p[1]));doc.close();doc.fill();
+  const nl=R([0,-8.2]);doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor('#111111');doc.text('N',nl[0],nl[1],{align:'center',baseline:'middle'});
+  // Maßstabsleiste
+  const cand=[1,2,5,10,20,25,50,100,200,250,500,1000,2000],maxmm=wN-22,L=cand.filter(v=>v*1000/S.sheet.scale<=maxmm).pop()||1,lm=L*1000/S.sheet.scale,bx=xN+4,by=y0+22;
+  for(let j=0;j<4;j++){doc.setFillColor(j%2?'#ffffff':'#111111');doc.rect(bx+j*lm/4,by,lm/4,1.6,'FD')}
+  doc.setFont('helvetica','normal');doc.setFontSize(7);doc.text('0',bx,by+5,{align:'center'});doc.text(L+' m',bx+lm,by+5,{align:'center'});
+}
+function legend(doc,f){
+  const ci=S.style==='linie'?2:1,mc=S.style==='linie'?'#111111':'#ffffff',E=[],seen=new Set(),add=(key,e)=>{if(!seen.has(key)){seen.add(key);E.push(e)}};
+  S.objs.forEach(o=>{if(o.t==='road'){o.strips.forEach(s=>add('s'+STRIP[s.k][0],{f:STRIP[s.k][ci],n:STRIP[s.k][0]}));o.lines.forEach(l=>{if(l&&l!=='none')add('l'+l,{l,n:LINE[l]})})}
+    else if(o.t==='line')add('l'+o.k,{l:o.k,n:LINE[o.k]});else if(o.t==='area')add('a'+o.k,{f:AREA[o.k][ci],n:AREA[o.k][0],h:o.k==='sperr'});else if(o.t==='guard')add('g'+o.k,{g:o.k,n:GUARD[o.k]})});
+  if(!E.length)return;E.sort((a,b)=>(a.f?0:a.l?1:2)-(b.f?0:b.l?1:2));
+  const rh=4.6,w=66,h=9+rh*E.length,x=f.ax+3,y=f.ay+3;doc.setFillColor('#ffffff');doc.setDrawColor('#111111');doc.setLineWidth(.25);doc.setLineDashPattern([],0);doc.rect(x,y,w,h,'FD');
+  doc.setFont('helvetica','bold');doc.setFontSize(8);doc.setTextColor('#111111');doc.text('Legende',x+3,y+5.2);doc.setFont('helvetica','normal');doc.setFontSize(7);
+  E.forEach((e,i)=>{const sy=y+8+i*rh,sx=x+3,sw=11,sh=3,my=sy+sh/2;doc.setLineDashPattern([],0);doc.setDrawColor('#777777');doc.setLineWidth(.12);
+    if(e.f){doc.setFillColor(e.f);doc.rect(sx,sy,sw,sh,'FD');if(e.h){doc.setDrawColor(mc);doc.setLineWidth(.3);for(let j=1;j<5;j++)doc.line(sx+j*2.2-1,sy+sh,sx+j*2.2+1,sy)}}
+    else if(e.l){const dark=e.l==='bord'||e.l==='kante';doc.setFillColor(dark?'#ffffff':AREA.asphalt[ci]);doc.rect(sx,sy,sw,sh,'FD');doc.setDrawColor(dark?'#3d4249':mc);
+      const br=['rand','breit','block','halt','warte'].includes(e.l);doc.setLineWidth(br?.7:.3);if(['leit','block','warte','furt'].includes(e.l))doc.setLineDashPattern([1.6,1.4],0);
+      if(e.l==='doppel'){doc.line(sx+.5,my-.45,sx+sw-.5,my-.45);doc.line(sx+.5,my+.45,sx+sw-.5,my+.45)}else doc.line(sx+.5,my,sx+sw-.5,my)}
+    else{doc.setDrawColor(INK);doc.setFillColor(e.g==='bsw'?'#6a6f77':'#ffffff');
+      if(e.g==='bsw')doc.rect(sx,my-.5,sw,1,'FD');else if(e.g==='leitpf'){[2,5.5,9].forEach(u=>doc.circle(sx+u,my,.6,'FD'))}
+      else{doc.setLineWidth(e.g==='lsw'?.7:.3);doc.line(sx,my,sx+sw,my);doc.setLineWidth(.25);[2,5.5,9].forEach(u=>{if(e.g==='sp')doc.line(sx+u,my,sx+u,my+1.2);else if(e.g==='dsp')doc.line(sx+u,my-1.1,sx+u,my+1.1);else if(e.g==='lsw'){doc.setFillColor(INK);doc.rect(sx+u-.6,my-.6,1.2,1.2,'F')}else{doc.line(sx+u-.7,my-.7,sx+u+.7,my+.7);doc.line(sx+u-.7,my+.7,sx+u+.7,my-.7)}})}}
+    doc.setTextColor('#111111');doc.text(lat(e.n),sx+sw+2.5,sy+2.5)});
+}
+async function exportPdf(){
+  if(!window.jspdf){toast('Die PDF-Bibliothek ist nicht geladen. Lade die Seite neu.');return}
+  let sheets=S.objs.filter(o=>o.t==='sheet');
+  if(!sheets.length){const c=s2w([CW/2,CH/2]),b=bbox()||[c[0],c[1],c[0],c[1]];S.objs.push({id:uid(),t:'sheet',p:[(b[0]+b[2])/2,(b[1]+b[3])/2],rot:0});S.layers.sheet=true;commit();renderTools();renderProps();draw();sheets=S.objs.filter(o=>o.t==='sheet');toast('Es gab noch kein Blatt. Ich habe eines in der Planmitte angelegt.')}
+  const btn=$('#bPdf');btn.disabled=true;btn.textContent='PDF wird erzeugt …';await new Promise(r=>setTimeout(r,30));
+  try{
+    const f=frame(),or=f.PW>=f.PH?'l':'p',doc=new window.jspdf.jsPDF({orientation:or,unit:'mm',format:[f.PW,f.PH],compress:true});
+    doc.setProperties({title:lat((S.meta.projekt||'Bestandsplan')+' - '+(S.meta.inhalt||'')),author:lat(S.meta.verfasser||''),creator:'Bestandsplan-Editor'});
+    let miss=0;
+    for(const[i,sh]of sheets.entries()){if(i)doc.addPage([f.PW,f.PH],or);
+      btn.textContent='Blatt '+(i+1)+' von '+sheets.length+' …';
+      const img=await bgRaster(sh,f);if(img){doc.addImage(img.data,'JPEG',f.ax,f.ay,f.aw,f.ah,undefined,'FAST');miss+=img.miss}
+      doc.saveGraphicsState();doc.rect(f.ax,f.ay,f.aw,f.ah,null);doc.clip();doc.discardPath();scene(pdfG(doc,sh,f));doc.restoreGraphicsState();
+      if(img&&img.att){doc.setFont('helvetica','normal');doc.setFontSize(5.5);const t='Kartengrundlage: '+lat(img.att),w=doc.getTextWidth(t);doc.setFillColor('#ffffff');doc.rect(f.ax+f.aw-w-3,f.ay+f.ah-3.6,w+3,3.6,'F');doc.setTextColor('#333333');doc.text(t,f.ax+f.aw-w-1.5,f.ay+f.ah-1.1)}
+      if(S.sheet.legend)legend(doc,f);titleBlock(doc,f,i,sheets.length,sh)}
+    if(miss)toast('Achtung: '+miss+' Kartenkacheln fehlen im PDF. Erzeuge es noch einmal, wenn der Kartendienst wieder antwortet.');
+    await saveFile(fname()+'_1-'+S.sheet.scale+'.pdf',doc.output('blob'));
+  }catch(e){console.error(e);toast('Das PDF konnte nicht erzeugt werden: '+(e.message||e))}
+  btn.disabled=false;btn.textContent='PDF erzeugen';
+}
+$('#bPdf').onclick=exportPdf;
+
+/* ---------- Start ---------- */
+(function start(){
+  let ok=false;
+  try{const raw=localStorage.getItem('bps.state');if(raw){loadState(JSON.parse(raw));ok=true;const bd=localStorage.getItem('bps.bg');if(bd&&S.bg)setBg(bd);else if(S.bg)S.bg=null}}catch(e){ok=false}
+  if(!ok)S=blank();
+  hist=[JSON.stringify(S)];hi=0;renderTools();renderProps();hint();
+  new ResizeObserver(resize).observe($('#stage'));resize();
+  let v=null;try{v=JSON.parse(localStorage.getItem('bps.view'))}catch(e){}
+  if(ok&&v&&v[0]>0){V.z=v[0];V.x=CW/2-v[1]*V.z;V.y=CH/2-v[2]*V.z;draw()}else if(bbox())fit();else{V.z=1.2;V.x=CW/2;V.y=CH/2;draw()}
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);
+})();
+</script>
+</body>
+</html>
