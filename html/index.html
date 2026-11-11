@@ -250,7 +250,7 @@ const LAST={road:'land2',line:'fsb',area:'asphalt',guard:'sp',sign:'274-60',sym:
 const V={z:1,x:0,y:0};
 function blank(){
   return {v:1,meta:{projekt:'',inhalt:'Bestandsplan',ag:'',verfasser:'HX mobility GmbH',bearb:'',plannr:'',datum:new Date().toLocaleDateString('de-DE')},
-    sheet:{paper:'A3',orient:'quer',scale:500,north:0,legend:true,bgPrint:false},style:'plan',surfAlpha:1,bg:null,origin:{e:HOME.e,n:HOME.n},map:{k:'grau',alpha:1},objs:[],
+    sheet:{paper:'A3',orient:'quer',scale:500,north:0,legend:true,bgPrint:false},style:'plan',surfAlpha:1,bg:null,signOff:7,origin:{e:HOME.e,n:HOME.n},map:{k:'grau',alpha:1},objs:[],
     layers:Object.fromEntries(LAYERS.map(l=>[l[0],true]))};
 }
 const uid=()=>nextId++;
@@ -380,18 +380,23 @@ function vzSpec(vz){
   if(b==='278')return sub==='60'?{k:'278'}:null;
   if(VZI[vz])return{k:vz};
   if(vz==='209-30')return{k:'211',q:1};
-  if(vz==='220-10'||vz==='214-30')return null;
+  if(vz==='220-10')return{k:'220',mir:1,lbl:'Einbahnstraße'};
+  if(vz==='214-30')return null;
   if(sub==='10'&&['209','211','214','222'].includes(b))return{k:b,mir:1};
   if(sub==='20'&&['103','105','121'].includes(b))return{k:b,mir:1};
   return{k:b};
 }
 function signCanvas(vz){
-  const sp=vzSpec(vz);if(!sp||!VZI[sp.k])return null;const key=sp.k+(sp.mir?'m':'')+(sp.q?'q':'')+(sp.txt?'t'+sp.txt:'');if(VZC[key])return VZC[key];
+  const sp=vzSpec(vz);if(!sp||!VZI[sp.k])return null;const key=sp.k+(sp.mir?'m':'')+(sp.q?'q':'')+(sp.txt?'t'+sp.txt:'')+(sp.lbl?'l':'');if(VZC[key])return VZC[key];
   let el=VZEL[sp.k];if(!el){el=VZEL[sp.k]=new Image();el.onload=()=>draw();el.src=VZI[sp.k][0]}
   if(!el.complete||!el.naturalWidth)return null;
   const W0=VZI[sp.k][1],H0=VZI[sp.k][2],f=2,w=(sp.q?H0:W0)*f,h=(sp.q?W0:H0)*f,c=document.createElement('canvas');c.width=w;c.height=h;
   const x=c.getContext('2d');x.imageSmoothingQuality='high';x.translate(w/2,h/2);if(sp.q)x.rotate(-Math.PI/2);if(sp.mir)x.scale(-1,1);x.drawImage(el,-W0*f/2,-H0*f/2,W0*f,H0*f);
   if(sp.txt){x.setTransform(1,0,0,1,0,0);x.fillStyle='#111111';x.textAlign='center';x.textBaseline='middle';x.font='700 '+Math.round(h*(sp.txt.length>2?.38:.48))+'px "Barlow Condensed","Arial Narrow",Arial,sans-serif';x.fillText(sp.txt,w/2,h*.53)}
+  if(sp.lbl){ // gespiegelter Pfeil: die Schrift im Schaft neu und lesbar setzen
+    x.setTransform(1,0,0,1,0,0);const bl=x.getImageData(Math.round(w*.5),Math.round(h*.12),1,1).data;x.fillStyle='#ffffff';x.fillRect(w*.27,h*.33,w*.665,h*.36);
+    x.fillStyle='rgb('+bl[0]+','+bl[1]+','+bl[2]+')';x.textAlign='center';x.textBaseline='middle';let fs=h*.3;x.font='600 '+fs+'px "Barlow Condensed","Arial Narrow",Arial,sans-serif';
+    const tw=x.measureText(sp.lbl).width;if(tw>w*.58){fs*=w*.58/tw;x.font='600 '+fs+'px "Barlow Condensed","Arial Narrow",Arial,sans-serif'}x.fillText(sp.lbl,w*.585,h*.52)}
   c._k=key;return VZC[key]=c;
 }
 function signPic(vz){ // vereinfachte Sinnbilder in Einheitskoordinaten (Zeichenradius 1)
@@ -638,7 +643,7 @@ cv.addEventListener('pointerdown',e=>{
     draw();return}
   if(POLY[tool]){const p=snap(w);if(!draft)draft={t:tool,pts:[]};draft.pts.push(p);if((tool==='dim'||tool==='calib')&&draft.pts.length===2){finish();return}hint();draw();return}
   let o={id:uid(),t:tool,p:w};
-  if(tool==='sign')Object.assign(o,{vz:LAST.sign,txt:'',rot:signRot(w,roadGeos())});
+  if(tool==='sign'){const pl=placeSign(w,roadGeos());Object.assign(o,{p:freeSpot(pl.p,pl.rot),vz:LAST.sign,txt:'',rot:pl.rot})}
   else if(tool==='sym')Object.assign(o,{k:LAST.sym,rot:0,len:5});
   else if(tool==='text')Object.assign(o,{s:'Text',size:3,rot:0,box:true});
   else if(tool==='sheet')o.rot=0;
@@ -712,7 +717,7 @@ function renderProps(){
       +'<p>Der Hintergrund dient zum Orientieren und Prüfen. Ins PDF kommt er nur mit dem Haken „Karte / Luftbild mitdrucken". Kataster: '+BASE.length+' Objekte geladen.</p>'+(BASE.length?'<div class="row">'+bt('Kataster entfernen',()=>{BASE=[];persistBase();renderProps();draw()},'warn')+'</div>':'');
     const nAuto=S.objs.filter(x=>x.src&&(x.t==='sign'||x.t==='sym')).length;
     const nSg=S.objs.filter(x=>x.t==='sign'||(x.t==='sym'&&x.k==='lsa')).length;
-    if(nSg)h+='<h3>Verkehrszeichen</h3><p>Ausrichtung aller '+nSg+' Schilder und Signalgeber:</p><div class="row">'+bt('In Fahrtrichtung drehen',()=>{const g=roadGeos();S.objs.forEach(x=>{if(x.t==='sign'||(x.t==='sym'&&x.k==='lsa'))x.rot=signRot(x.p,g)});commit();draw()})+bt('Aufrecht stellen',()=>{S.objs.forEach(x=>{if(x.t==='sign'||(x.t==='sym'&&x.k==='lsa'))x.rot=0});commit();draw()})+'</div>';
+    if(nSg)h+='<h3>Verkehrszeichen</h3>'+fNum('Abstand zum Rand (mm)',S,'signOff',{step:1,min:2})+'<p>Gilt für alle '+nSg+' Schilder und Signalgeber. Der Abstand ist im Plan gemessen.</p><div class="row">'+bt('Neben die Straße setzen',()=>{arrangeSigns();commit();draw()})+bt('In Fahrtrichtung drehen',()=>{const g=roadGeos();S.objs.forEach(x=>{if(x.t==='sign'||(x.t==='sym'&&x.k==='lsa'))x.rot=signRot(x.p,g)});commit();draw()})+bt('Aufrecht stellen',()=>{S.objs.forEach(x=>{if(x.t==='sign'||(x.t==='sym'&&x.k==='lsa'))x.rot=0});commit();draw()})+'</div>';
     if(nAuto)h+='<p>'+nAuto+' automatisch übernommene Schilder und Signalgeber im Plan.</p><div class="row">'+bt('Übernommene Schilder entfernen',()=>{S.objs=S.objs.filter(x=>!(x.src&&(x.t==='sign'||x.t==='sym')));commit();renderProps();draw()},'warn')+'</div>';
     h+='<h3>Eigenes Bild</h3>';
     if(S.bg)h+=fRng('Deckkraft',S.bg,'alpha',.1,1,.05)+'<p>1 Pixel = '+S.bg.mpp.toFixed(3).replace('.',',')+' m, Bildbreite '+(S.bg.w*S.bg.mpp).toFixed(0)+' m.</p><div class="row">'+bt('Neu kalibrieren',()=>setTool('calib'))+bt('Entfernen',()=>{S.bg=null;BGDATA=null;BGIMG=null;persistBg();commit();renderProps();draw()},'warn')+'</div>';
@@ -745,7 +750,7 @@ function renderProps(){
         +(o.k==='sp'?fSel('Pfostenseite',o,'side',{1:'rechts',"-1":'links'},{num:1}):'')+(o.k==='leitpf'?fNum('Abstand (m)',o,'int',{step:5,min:5}):'')+fChk('Ausrunden',o,'smooth');
     }else if(o.t==='sign'){h+=fTxt('VZ-Nummer',o,'vz',{list:'vzl',after:v=>{LAST.sign=v;const n=$('#vzn');if(n)n.textContent=VZ[v]||'Freie Nummer, Symbol nach Zeichengruppe.'}})
         +'<datalist id="vzl">'+Object.entries(VZ).map(([k,n])=>'<option value="'+k+'">'+esc(n)+'</option>').join('')+'</datalist><p id="vzn">'+esc(VZ[o.vz]||'Freie Nummer, Symbol nach Zeichengruppe.')+'</p>'
-        +fTxt('Zusatz',o,'txt',{ph:'z. B. ZZ 1004-31, 400 m'})+fNum('Drehung (Grad)',o,'rot',{step:15})+'<p>Drehung 0 heißt: steht aufrecht zum Blatt. Sonst zeigt die Oberkante in die angegebene Richtung (90 = Fahrtrichtung Osten).'+(o.src?' Aus '+(o.src==='mly'?'Mapillary':'OpenStreetMap')+' übernommen, Standort ungefähr.':'')+'</p>';
+        +fTxt('Zusatz',o,'txt',{ph:'z. B. ZZ 1004-31, 400 m'})+fNum('Drehung (Grad)',o,'rot',{step:15})+'<p>Neue Schilder springen im festen Abstand neben die nächste Straße. Zum freien Platzieren danach verschieben. Drehung 0 heißt: aufrecht zum Blatt, sonst zeigt die Oberkante in die angegebene Richtung (90 = Fahrtrichtung Osten).'+(o.src?' Aus '+(o.src==='mly'?'Mapillary':'OpenStreetMap')+' übernommen, Standort ungefähr.':'')+'</p>';
     }else if(o.t==='sym'){h+=fSel('Symbol',o,'k',SYM,{re:1,after:v=>LAST.sym=v})+fNum('Drehung (Grad)',o,'rot',{step:15})+(o.k.startsWith('pf_')?fNum('Länge (m)',o,'len',{step:.5,min:1}):o.k==='baum'?fNum('Kronenradius (m)',o,'len',{step:.5,min:.5}):'');
     }else if(o.t==='text'){h+=fTxt('Text',o,'s')+fNum('Schrifthöhe (mm)',o,'size',{step:.5,min:1.5})+fNum('Drehung (Grad)',o,'rot',{step:15})+fChk('Fett',o,'bold')+fChk('Weiß hinterlegt',o,'box');
     }else if(o.t==='dim'){h+='<p>Gemessene Länge: '+dist(o.pts[0],o.pts[1]).toFixed(2).replace('.',',')+' m. Ziehe die Endpunkte, sie rasten an Stützpunkten ein.</p>';
@@ -882,6 +887,23 @@ function offRoad(p,geos){ // Schilder stehen nicht in der Fahrbahn: an den näch
     if(sg>lo-.4&&sg<hi+.4){const tgt=sg-lo<hi-sg?lo-1:hi+1,m=Math.abs(tgt-sg);if(!best||m<best.m)best={m,g,q,tgt}}});
   if(!best)return p;const c=at(best.g.D,best.g.c,best.q.s);return[Math.round((c.p[0]-Math.sin(c.a)*best.tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*best.tgt)*100)/100];
 }
+function placeSign(p,geos){ // fester Abstand neben dem Fahrbahnrand der nächsten Straße, Oberkante in Fahrtrichtung
+  let b=null;geos.forEach(g=>{const q=proj(g.D,p);if(q.d<35&&(!b||q.d<b.q.d))b={g,q}});if(!b)return{p,rot:0};
+  const g=b.g,sg=b.q.d*b.q.side,lo=g.off[0],hi=g.off[g.off.length-1],right=sg>=(lo+hi)/2,D=(+S.signOff||7)*S.sheet.scale/1000,tgt=right?hi+D:lo-D,c=at(g.D,g.c,b.q.s);
+  let d=Math.round((g.ow||right?c.a:c.a+Math.PI)*180/Math.PI+90)%360;if(d<=0)d+=360;
+  return{p:[Math.round((c.p[0]-Math.sin(c.a)*tgt)*100)/100,Math.round((c.p[1]+Math.cos(c.a)*tgt)*100)/100],rot:d};
+}
+function arrangeSigns(){const g=roadGeos();S.objs.forEach(x=>{if(x.t==='sign'||(x.t==='sym'&&x.k==='lsa')){const r=placeSign(x.p,g);x.p=[1e9,1e9];x.rot=r.rot;x.p=x.t==='sign'?freeSpot(r.p,r.rot):r.p}})}
+function kmFit(ms){ // Kilometrierung der klassifizierten Straßen aus Kilometersteinen ableiten
+  const groups={};S.objs.forEach(r=>{if(r.t==='road'&&r.name&&/^[ABLK]\s?\d/.test(r.name))(groups[r.name]=groups[r.name]||[]).push({r,g:rg(r)})});let n=0;
+  Object.values(groups).forEach(G=>{const near=ms.filter(m=>G.some(x=>proj(x.g.D,m.p).d<40));if(near.length<2)return;
+    let A=null,B=null,md=0;near.forEach(a=>near.forEach(c=>{const d=dist(a.p,c.p);if(d>md&&a.km!==c.km){md=d;A=a;B=c}}));if(!A)return;
+    const sg=Math.sign(B.km-A.km),v=[(B.p[0]-A.p[0])*sg,(B.p[1]-A.p[1])*sg];
+    G.forEach(x=>{const g=x.g;if(g.D.length<2)return;let best=null;near.forEach(m=>{const q=proj(g.D,m.p);if(!best||q.d<best.q.d)best={m,q}});if(!best||best.q.d>1500)return;
+      const c=at(g.D,g.c,best.q.s),dir=Math.cos(c.a)*v[0]+Math.sin(c.a)*v[1]>=0?1:-1;let sE=best.q.s;if(best.q.d>40)sE=best.q.s<1?-best.q.d:best.q.s>g.len-1?g.len+best.q.d:best.q.s;
+      Object.assign(x.r,{st0:Math.round(best.m.km*1000-dir*sE),stDir:dir,stFmt:'km',stInt:100,stShow:!(x.r.ow&&dir<0)});n++})});
+  return n;
+}
 function freeSpot(p,rot){ // mehrere Schilder am selben Standort nebeneinander statt übereinander
   const g=7*S.sheet.scale/1000,a=rot?(rot-90)*Math.PI/180:0;let q=p.slice();
   for(let i=0;i<6&&S.objs.some(x=>x.t==='sign'&&dist(x.p,q)<g*.8);i++)q=[Math.round((q[0]+Math.cos(a)*g)*100)/100,Math.round((q[1]+Math.sin(a)*g)*100)/100];
@@ -920,7 +942,7 @@ function osmRoads(els,b){
 }
 let PROG=()=>{};
 async function makeBase(b,opt){
-  const res=[],err=[],btn=$('#bBase'),total=(opt.kat?5:0)+(opt.osm||opt.sign?1:0)+(opt.mly?1:0);let done=0;btn.disabled=true;btn.textContent='Grundlage wird erzeugt …';
+  const res=[],err=[],btn=$('#bBase'),total=(opt.kat?5:0)+(opt.osm||opt.sign||opt.km?1:0)+(opt.mly?1:0);let done=0;btn.disabled=true;btn.textContent='Grundlage wird erzeugt …';
   const show=label=>{$('#prog').style.display='block';$('#progT').textContent='Schritt '+Math.min(done+1,total)+' von '+total+': '+label;$('#progB').style.width=Math.round(done/total*100)+'%'};
   PROG=show;
   const step=async(label,fn)=>{show(label);try{await fn()}catch(e){console.error(e);err.push(label+': '+(e.message||'nicht erreichbar'))}done++;$('#progB').style.width=Math.round(done/total*100)+'%'};
@@ -932,19 +954,22 @@ async function makeBase(b,opt){
     await step('Straßennamen',async()=>{res.push(addLabels(await wfs('nora:v_al_label_name2',b),()=>'str')+' Straßennamen')});
     S.layers.base=true;persistBase();
   }
-  if(opt.osm||opt.sign)await step(opt.osm?'Straßen':'Beschilderung',async()=>{
+  if(opt.osm||opt.sign||opt.km)await step(opt.osm?'Straßen':'Beschilderung',async()=>{
     const o=S.origin,sw=utm32inv(o.e+b[0],o.n-b[3]),ne=utm32inv(o.e+b[2],o.n-b[1]),bb='('+[sw[0],sw[1],ne[0],ne[1]].map(v=>v.toFixed(6)).join(',')+');';
     const q='[out:json][timeout:40];('+(opt.osm?'way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street)(_link)?$"]'+bb:'')
-      +(opt.sign?'node["traffic_sign"]'+bb+'node["highway"~"^(stop|give_way|traffic_signals)$"]'+bb:'')+');out body geom;';
+      +(opt.sign?'node["traffic_sign"]'+bb+'node["highway"~"^(stop|give_way|traffic_signals)$"]'+bb:'')+(opt.km?'node["highway"="milestone"]'+bb:'')+');out body geom;';
     const j=await overpass(q),els=j.elements||[],inb=p=>p[0]>=b[0]&&p[0]<=b[2]&&p[1]>=b[1]&&p[1]<=b[3];
     if(opt.repl)S.objs=S.objs.filter(x=>!(x.src==='osm'&&((opt.osm&&x.t==='road'&&x.pts.some(inb))||(opt.sign&&(x.t==='sign'||x.t==='sym')&&inb(x.p)))));
     if(opt.osm){const rs=osmRoads(els,b);
       rs.slice(0,800).forEach(x=>S.objs.push({id:uid(),t:'road',src:'osm',ow:x.sec.ow,pts:x.pts,smooth:true,name:x.sec.name,preset:'osm',kl:x.sec.kl,strips:x.sec.strips,lines:x.sec.lines,axis:'f',rank:x.sec.rank,st0:0,stInt:100,stDir:1,stShow:false,stFmt:x.sec.kl==='bab'?'km':'plus'}));
       res.push(Math.min(rs.length,800)+' Straßenabschnitte');S.layers.road=true}
+    if(opt.km){const ms=[];els.forEach(e=>{if(e.type!=='node'||!e.tags||e.tags.highway!=='milestone'||e.lat==null)return;const km=parseFloat(String(e.tags.distance||e.tags.pk||'').replace(',','.'));if(isNaN(km))return;
+        const u=utm32(e.lat,e.lon);ms.push({p:[u[0]-o.e,o.n-u[1]],km})});
+      const nk=kmFit(ms);res.push(ms.length?'Kilometrierung für '+nk+' Straßenabschnitte aus '+ms.length+' Kilometersteinen':'keine Kilometersteine im Ausschnitt');if(nk)S.layers.stat=true}
     if(opt.sign){let ns=0,nl=0;const gap=9*S.sheet.scale/1000,geos=roadGeos();
       els.forEach(e=>{if(e.type!=='node'||!e.tags||e.lat==null)return;const u=utm32(e.lat,e.lon),p=[Math.round((u[0]-o.e)*100)/100,Math.round((o.n-u[1])*100)/100];if(!inb(p))return;const t=e.tags;
         let sg=t.traffic_sign?osmSigns(t.traffic_sign):[];if(!sg.length&&t.highway==='stop')sg=[{vz:'206',txt:''}];if(!sg.length&&t.highway==='give_way')sg=[{vz:'205',txt:''}];
-        const q=offRoad(p,geos),ro=opt.orient?signRot(q,geos):0;sg.forEach(x=>{S.objs.push({id:uid(),t:'sign',src:'osm',p:freeSpot(q,ro),vz:x.vz,txt:x.txt,rot:ro});ns++});
+        const pl=opt.orient?placeSign(p,geos):{p:offRoad(p,geos),rot:0},q=pl.p,ro=pl.rot;sg.forEach(x=>{S.objs.push({id:uid(),t:'sign',src:'osm',p:freeSpot(q,ro),vz:x.vz,txt:x.txt,rot:ro});ns++});
         if(t.highway==='traffic_signals'){S.objs.push({id:uid(),t:'sym',src:'osm',k:'lsa',p:q,rot:ro,len:5});nl++}});
       res.push(ns+' Verkehrszeichen, '+nl+' Signalgeber');S.layers.sign=true;S.layers.sym=true}});
   if(opt.mly)await step('Mapillary',async()=>{
@@ -953,8 +978,8 @@ async function makeBase(b,opt){
     const cand=[],geos=roadGeos();
     fs.forEach(f=>{const u=utm32(f.geometry.coordinates[1],f.geometry.coordinates[0]),p=[u[0]-o.e,o.n-u[1]],v=String(f.object_value||'');if(!inb(p))return;
       if(/^object--traffic-light/.test(v)){cand.push({key:'lsa',p});return}const z=mlyVz(v);if(z)cand.push({key:z.vz+'|'+(z.txt||''),vz:z.vz,txt:z.txt||'',p})});
-    cluster(cand.filter(c=>c.key==='lsa'),12).forEach(c=>{const p=offRoad(c.p,geos);if(S.objs.some(x=>x.t==='sym'&&x.k==='lsa'&&dist(x.p,p)<12))return;S.objs.push({id:uid(),t:'sym',src:'mly',k:'lsa',p,rot:opt.orient?signRot(p,geos):0,len:5});nl++});
-    cluster(cand.filter(c=>c.key!=='lsa'),18).forEach(c=>{const p=offRoad(c.p,geos);if(S.objs.some(x=>x.t==='sign'&&x.vz===c.vz&&dist(x.p,p)<18))return;const ro=opt.orient?signRot(p,geos):0;S.objs.push({id:uid(),t:'sign',src:'mly',p:freeSpot(p,ro),vz:c.vz,txt:c.txt,rot:ro});ns++});
+    cluster(cand.filter(c=>c.key==='lsa'),12).forEach(c=>{const pl=opt.orient?placeSign(c.p,geos):{p:offRoad(c.p,geos),rot:0},p=pl.p;if(S.objs.some(x=>x.t==='sym'&&x.k==='lsa'&&dist(x.p,p)<12))return;S.objs.push({id:uid(),t:'sym',src:'mly',k:'lsa',p,rot:pl.rot,len:5});nl++});
+    cluster(cand.filter(c=>c.key!=='lsa'),18).forEach(c=>{const pl=opt.orient?placeSign(c.p,geos):{p:offRoad(c.p,geos),rot:0},p=pl.p;if(S.objs.some(x=>x.t==='sign'&&x.vz===c.vz&&dist(x.p,p)<18))return;const ro=pl.rot;S.objs.push({id:uid(),t:'sign',src:'mly',p:freeSpot(p,ro),vz:c.vz,txt:c.txt,rot:ro});ns++});
     res.push('aus Mapillary '+ns+' Verkehrszeichen und '+nl+' Signalgeber');S.layers.sign=true;S.layers.sym=true});
   if(opt.plan)S.style='plan';if(opt.hide&&!err.length)S.map.k='none';
   $('#progT').textContent='Fertig';await new Promise(r=>setTimeout(r,500));$('#prog').style.display='none';
@@ -972,7 +997,8 @@ $('#bBase').onclick=()=>{
     +'<label class="chk"><input type="checkbox" id="gbK" checked>Kataster übernehmen (Flurstücke, Gebäude, Verkehrsflächen)</label>'
     +'<label class="chk"><input type="checkbox" id="gbO" checked>Straßen aus OpenStreetMap vorschlagen</label>'
     +'<label class="chk"><input type="checkbox" id="gbS" checked>Bestandsbeschilderung aus OpenStreetMap vorschlagen (lückenhaft, Standorte ungefähr)</label>'
-    +'<label class="chk"><input type="checkbox" id="gbD" checked>Schilder in Fahrtrichtung der nächsten Straße drehen</label>'
+    +'<label class="chk"><input type="checkbox" id="gbD" checked>Schilder im festen Abstand neben die Straße setzen und in Fahrtrichtung drehen</label>'
+    +'<label class="chk"><input type="checkbox" id="gbKm" checked>Kilometrierung aus Kilometersteinen ableiten (Autobahnen, Bundes- und Landesstraßen)</label>'
     +'<label class="chk"><input type="checkbox" id="gbM"'+(mtok?' checked':'')+'>Schilder und Ampeln aus Mapillary-Bilderkennung ergänzen (Zugangsschlüssel nötig, höchstens 4 km²)</label>'
     +'<label class="f"><span>Mapillary-Schlüssel</span><input type="text" id="gbT" autocomplete="off" placeholder="MLY|…" value="'+esc(mtok)+'"></label>'
     +'<label class="chk"><input type="checkbox" id="gbR" checked>früher übernommene Straßen und Schilder im Ausschnitt ersetzen</label>'
@@ -984,7 +1010,7 @@ $('#bBase').onclick=()=>{
       const tok=$('#gbT').value.trim(),mly=$('#gbM').checked;if(mly&&!tok){toast('Für Mapillary fehlt der Zugangsschlüssel. Trag ihn ein oder nimm den Haken heraus.');return 'keep'}
       if(mly&&km2>4){toast('Mapillary geht nur bis 4 km² pro Durchgang. Zoome näher heran oder nimm den Haken heraus.');return 'keep'}
       try{tok?localStorage.setItem('bps.mly',tok):localStorage.removeItem('bps.mly')}catch(e){}
-      makeBase(b,{mly,tok,orient:$('#gbD').checked,kat:$('#gbK').checked,osm:$('#gbO').checked,sign:$('#gbS').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
+      makeBase(b,{mly,tok,orient:$('#gbD').checked,km:$('#gbKm').checked&&$('#gbO').checked,kat:$('#gbK').checked,osm:$('#gbO').checked,sign:$('#gbS').checked,repl:$('#gbR').checked,plan:$('#gbP').checked,hide:$('#gbH').checked})},'pri']]);
 };
 $('#mapSel').onchange=e=>{S.map.k=e.target.value;S.layers.bg=true;commit();renderTools();renderProps();draw()};
 
