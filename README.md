@@ -74,6 +74,15 @@ Die Straßenachsen kommen vom öffentlichen Server overpass-api.de: https://wiki
 - Der Editor stellt eine Abfrage pro „Grundlage erzeugen", der Server puffert sie 7 Tage.
 - Server-Adressen können bei Überlast gesperrt werden. Dann liefert „Grundlage erzeugen" nur das Kataster, und die Straßen zeichnest du von Hand.
 
+### Mapillary (optional, für mehr Schilder und Ampeln)
+
+Mapillary erkennt Verkehrszeichen und Ampeln automatisch in Straßenfotos. Der Editor fragt diese Erkennungen für den Ausschnitt ab und legt sie als Verkehrszeichen an.
+
+- Nötig ist ein kostenloser Zugangsschlüssel (Client Token, beginnt mit `MLY|`) aus dem Entwicklerbereich von mapillary.com. Er wird im Dialog „Grundlage erzeugen" eingetragen und nur im Browser gespeichert, nicht auf dem Server und nicht in der Projektdatei.
+- Die Standorte sind geschätzt (einige Meter Abweichung), Blickrichtung und Zusatzzeichen fehlen, Fehl- und Doppelerkennungen kommen vor. Nicht zuordenbare Schilder erscheinen als „Z ?" mit der Mapillary-Bezeichnung.
+- Abdeckung und Alter hängen davon ab, wann dort zuletzt Fotos hochgeladen wurden.
+- Lizenz: CC BY-SA 4.0, dazu die Nutzungsbedingungen von Mapillary (Abschnitt zu kommerzieller Nutzung). Bitte selbst prüfen, ob das zu deiner Verwendung passt.
+
 ### Was die automatische Grundlage kann und was nicht
 
 - Das Kataster ist amtlich und lagegenau, zeigt aber Grundstücke und Gebäude, keine Fahrbahnränder.
